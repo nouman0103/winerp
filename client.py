@@ -1,8 +1,10 @@
 import asyncio
 import websockets
-from .types import PayloadTypes
 import json
 import logging
+from lib.message import WsMessage
+from lib.payload import PayloadTypes
+import uuid
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -15,6 +17,7 @@ class Client:
         self.local_name = local_name
         self.websocket = None
         self.routes = {}
+        self.listeners = {}
         
         self.loop = loop or asyncio.get_running_loop()
         self.authorized = False
@@ -39,37 +42,104 @@ class Client:
             if (name is None and func.__name__ in self.routes) or (name is not None and name in self.routes):
                 raise ValueError("Route name already exists!")
             
+            if not asyncio.iscoroutine(func):
+                raise RuntimeError("Route function must be a coro.")
+            
             self.routes[name or func.__name__] = func
             return func
             
         return route_decorator
-
-    async def request(self, route, source, *args, **kwargs):
-        if self.websocket is not None and self.websocket.open:
-            await self.send_message(
-                {"type": PayloadTypes.request,
-                 "id":self.local_name,
-                 "destination": source,
-                 "route": route,
-                 "args": args,
-                 "kwargs": kwargs})
-
-
     
+    def get_response(
+        self,
+        _uuid: str,
+        loop: asyncio.AbstractEventLoop,
+        check = None,
+        timeout: int = 60
+    ):
+        future = loop.create_future()
+        self.listeners[_uuid] = (check, future)
+        return asyncio.wait_for(future, timeout, loop=loop)
+
+    async def request(
+        self,
+        route: str,
+        source: str,
+        timeout: int = 60,
+        **kwargs
+    ):
+        '''
+        Requests the server for a response.
+        Resolves when the response is received matching the UUID.
+
+        Raises:
+            `RuntimeError`: If the UUID is not found.
+            `asyncio.TimeoutError`: If the response is not received within the timeout.
+        '''
+        if self.websocket is not None and self.websocket.open:
+            logger.info("Requesting IPC Server for %r with data %r", route, kwargs)
+        
+            _uuid = str(uuid.uuid4())
+            payload = {
+                "type": PayloadTypes.request,
+                "id":self.local_name,
+                "destination": source,
+                "route": route,
+                "data": kwargs
+            }
+            logger.debug("Client > %r", payload)
+
+            await self.send_message(payload)
+            recv = await self.get_response(_uuid, asyncio.get_running_loop(), timeout=timeout)
+            logger.debug("Client < %r", recv)
+            return recv
+
     async def __on_message(self):
         while True:
-            response = json.loads(await self.websocket.recv())
-            if response["type"] == PayloadTypes.success:
+            message = WsMessage(json.loads(await self.websocket.recv()))
+            if message.type.success:
                 logger.info("Authorized Successfully")
                 self.authorized = True
 
-            if response["type"] == PayloadTypes.request:
-                if response["request"] not in self.routes:
-                    logger.info("Failed to fulful request, route not found")
+            elif message.type.request:
+                if message.route not in self.routes:
+                    logger.info("Failed to fulfill request, route not found")
                     self.loop.create_task(self.send_message({"type":4, "details":"Route does not exist!"}))
+                    return
+            
+            elif message.type.response:
+                logger.info("Fulfilling request @ route: %s", message.route)
+                self.loop.create_task(self._dispatch(message, message.route))
 
-            if response["type"] == PayloadTypes.error:
-                logger.warning("Failed to fulful request, route not found")
+            elif message.type.error:
+                logger.warning("Failed to fulfill request, route not found")
+    
+    async def _dispatch(self, msg: WsMessage, route: str):
+        data = msg.data
+        logger.debug('Dispatch -> %r', data)
+        _uuid = data.get('_uuid')
+        if _uuid is None:
+            raise RuntimeError('UUID is missing.')
+        
+        logger.debug('Listeners: %r', self.listeners)
+        for key, val in self.listeners.items():
+            if key == _uuid:
+                check = val[0]
+                future: asyncio.Future = val[1]
+
+                def _check(*args):
+                    return True
+
+                if check is None:
+                    check = _check
+                
+                if check(data):
+                    future.set_result(data)
+                else:
+                    future.set_exception(
+                        RuntimeError(f'Check failed for UUID {uuid}')
+                    )
+
 
             
 
