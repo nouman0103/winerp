@@ -2,8 +2,8 @@ import asyncio
 import websockets
 import json
 import logging
-from lib.message import WsMessage
-from lib.payload import PayloadTypes
+from .lib.message import WsMessage
+from .lib.payload import Payloads
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class Client:
             logger.info("Connecting to Websocket")
             self.websocket = await websockets.connect(self.uri, close_timeout=0, ping_interval=None)
             logger.info("Connected to Websocket")
-            await self.send_message({"type": PayloadTypes.verification, "id":self.local_name})
+            await self.send_message({"type": Payloads.verification, "id":self.local_name})
             logger.info("Verification request sent")
             self.loop.create_task(self.__on_message())
             logger.info("Listening to messages")
@@ -42,7 +42,7 @@ class Client:
             if (name is None and func.__name__ in self.routes) or (name is not None and name in self.routes):
                 raise ValueError("Route name already exists!")
             
-            if not asyncio.iscoroutine(func):
+            if not asyncio.iscoroutinefunction(func):
                 raise RuntimeError("Route function must be a coro.")
             
             self.routes[name or func.__name__] = func
@@ -81,7 +81,7 @@ class Client:
         
             _uuid = str(uuid.uuid4())
             payload = {
-                "type": PayloadTypes.request,
+                "type": Payloads.request,
                 "id":self.local_name,
                 "destination": source,
                 "route": route,
