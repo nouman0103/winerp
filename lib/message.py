@@ -15,7 +15,7 @@ class WsMessage:
     @property
     def id(self) -> int:
         '''
-        Retusn the id of the bot.
+        Returns the id of the bot.
         '''
         return self._message["id"]
     
@@ -38,7 +38,7 @@ class WsMessage:
         '''
         Returns the unique id associated with this message.
         '''
-        return self._message["uuid"]
+        return self._message.get("uuid")
     
     @property
     def data(self) -> dict:
@@ -46,6 +46,34 @@ class WsMessage:
         Returns the data associated with the message.
         '''
         return self._message["data"]
+    
+    @property
+    def error(self) -> str:
+        '''
+        Returns the error associated with the message.
+        '''
+        return self._message.get("error")
+    
+    @error.setter
+    def error(self, error: str):
+        '''
+        Sets the error associated with the message.
+        '''
+        self._message["error"] = error
+    
+    @property
+    def traceback(self) -> str:
+        '''
+        Returns the error associated with the message.
+        '''
+        return self._message.get("traceback")
+    
+    @traceback.setter
+    def traceback(self, traceback: str):
+        '''
+        Sets the error associated with the message.
+        '''
+        self._message["traceback"] = traceback
 
     def to_dict(self) -> dict:
         '''
@@ -57,5 +85,7 @@ class WsMessage:
             'destination': self.destination,
             'route': self.route,
             'uuid': self.uuid,
-            'data': self.data
+            'data': self.data,
+            'error': self.error,
+            'traceback': self.traceback
         }

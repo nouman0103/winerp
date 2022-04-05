@@ -5,6 +5,7 @@ import logging
 from .lib.message import WsMessage
 from .lib.payload import Payloads
 import uuid
+import traceback
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -81,6 +82,7 @@ class Client:
         
             _uuid = str(uuid.uuid4())
             payload = {
+                "uuid": _uuid,
                 "type": Payloads.request,
                 "id":self.local_name,
                 "destination": source,
@@ -90,34 +92,74 @@ class Client:
             logger.debug("Client > %r", payload)
 
             await self.send_message(payload)
-            recv = await self.get_response(_uuid, asyncio.get_running_loop(), timeout=timeout)
+            recv = await self.get_response(_uuid, self.loop, timeout=timeout)
             logger.debug("Client < %r", recv)
             return recv
 
     async def __on_message(self):
         while True:
             message = WsMessage(json.loads(await self.websocket.recv()))
-            if message.type.success:
+            if message.type.success and message.data["details"] == "Authorized":
                 logger.info("Authorized Successfully")
                 self.authorized = True
 
             elif message.type.request:
                 if message.route not in self.routes:
                     logger.info("Failed to fulfill request, route not found")
-                    self.loop.create_task(self.send_message({"type":4, "details":"Route does not exist!"}))
+                    self.loop.create_task(self.send_message({
+                        "type": Payloads.error,
+                        "error": "Route does not exist!",
+                        "traceback": "Route does not exist!",
+                        "id": self.local_name,
+                        "destination": message.id,
+                        "uuid": message.uuid})
+                    )
                     return
+                logger.info("Fulfilling request @ route: %s", message.route)
+                self.loop.create_task(self._fulfill_request(message))
             
             elif message.type.response:
-                logger.info("Fulfilling request @ route: %s", message.route)
-                self.loop.create_task(self._dispatch(message, message.route))
+                logger.info(f"Received a response from server @ uuid: {message.uuid}")
+                self.loop.create_task(self._dispatch(message))
 
             elif message.type.error:
-                logger.warning("Failed to fulfill request, route not found")
+                logger.warning(f"Failed to fulfill request: {message.error}")
     
-    async def _dispatch(self, msg: WsMessage, route: str):
+    async def _fulfill_request(self, message: WsMessage):
+        route = message.route
+        func = self.routes[route]
+        data = message.data
+        payload = {
+            "uuid": message.uuid,
+            "type": Payloads.response,
+            "id": self.local_name,
+            "destination": message.destination,
+            "data": None,
+            "error": None,
+            "traceback": None
+        }
+        try:
+            result = await func(**data)
+            if not isinstance(result, dict):
+                result = { 'result': result }
+            payload["data"] = result
+        except Exception as error:
+            logger.exception(error)
+            etype = type(error)
+            trace = error.__traceback__
+            lines = traceback.format_exception(etype, error, trace)
+            traceback_text = ''.join(lines)
+
+            payload["type"] = Payloads.error
+            payload["error"] = str(error)
+            payload["traceback"] = traceback_text
+        finally:
+            self.loop.create_task(self.send_message(payload))
+    
+    async def _dispatch(self, msg: WsMessage):
         data = msg.data
         logger.debug('Dispatch -> %r', data)
-        _uuid = data.get('_uuid')
+        _uuid = msg.uuid
         if _uuid is None:
             raise RuntimeError('UUID is missing.')
         
@@ -137,10 +179,5 @@ class Client:
                     future.set_result(data)
                 else:
                     future.set_exception(
-                        RuntimeError(f'Check failed for UUID {uuid}')
+                        RuntimeError(f'Check failed for UUID {_uuid}')
                     )
-
-
-            
-
-                
