@@ -31,6 +31,7 @@ bot.ipc = winerp.Client(local_name = "some-random-bot", loop = bot.loop, port=80
 
 @bot.command()
 async def request(ctx):
+    # Fetching data from a client named "another-bot" using route "get_some_data"
     data = await bot.ipc.request("get_some_data", source = "another-bot")
     await ctx.send(data)
 
@@ -61,6 +62,7 @@ bot.ipc = winerp.Client(local_name = "another-bot", loop = bot.loop, port=8080)
 
 @bot.command()
 async def format(ctx):
+    # Fetching data from a client named "some-random-bot" using route "get_formatted_data"
     data = await bot.ipc.request("get_formatted_data", source = "some-random-bot", user_id = ctx.author.id)
     await ctx.send(data)
 
