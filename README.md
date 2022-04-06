@@ -1,7 +1,15 @@
 # winerp
 An IPC based on Websockets. Fast, Stable, and Reliable, perfect for communication between your processes or discord.py bots.
 
-Install using `pip install winerp`
+## Installation
+Stable:
+```py
+pip install winerp
+```
+Main branch (can be unstable/buggy):
+```py
+pip install git+https://www.github.com/BlackThunder01001/winerp
+```
 
 ## Working:
 This library uses a central server for communication between multiple processes. You can connect a large number of clients for sharing data, and data can be shared between any connected client.
@@ -78,8 +86,10 @@ bot.run("TOKEN")
 
 # Features
 
- - Fast: Minimum Response Time Recorded: `0.001s`
- - Reliable, Stable and Easy to integrate
- - A single hosted server can be used to serve all clients on the machine
- - No limitation on number of connected clients
+ - Fast: Minimum Response Time Recorded: `0.001s`.
+ - Reliable, Stable and Easy to integrate.
+ - A single hosted server can be used to serve all clients on the machine.
+ - No limitation on number of connected clients.
+ - Inter bot-communication possible.
+ - Inter server-communication possible.
 
