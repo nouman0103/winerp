@@ -1,5 +1,4 @@
 import asyncio
-from aioredis import ConnectionClosedError
 import websockets
 import json
 import logging
