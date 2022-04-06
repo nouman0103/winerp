@@ -1,4 +1,5 @@
 import asyncio
+from aioredis import ConnectionClosedError
 import websockets
 import json
 import logging
@@ -10,7 +11,7 @@ import traceback
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
-#logger.propagate = False
+logger.propagate = False
 
 class Client:
     def __init__(self, local_name, loop = None, port=13254):
@@ -23,7 +24,20 @@ class Client:
         
         self.loop = loop or asyncio.get_running_loop()
         self.authorized = False
+        self.events = {
+            "on_winerp_connect": None,
+            "on_winerp_ready": None,
+            "on_winerp_disconnect": None,
+            "on_winerp_request": None,
+            "on_winerp_response": None
+        }
     
+    async def __empty_event(self, *args, **kwargs):
+        ...
+
+    def get_event(self, key):
+        return self.events.get(key) or self.__empty_event
+
     @property
     def url(self):
         '''
@@ -43,6 +57,7 @@ class Client:
         if self.websocket is None or self.websocket.closed:
             logger.info("Connecting to Websocket")
             self.websocket = await websockets.connect(self.uri, close_timeout=0, ping_interval=None)
+            self.loop.create_task(self.get_event("on_winerp_connect")())
             logger.info("Connected to Websocket")
             payload = MessagePayload(
                 type = Payloads.verification,
@@ -117,9 +132,14 @@ class Client:
 
     async def __on_message(self):
         while True:
-            message = WsMessage(json.loads(await self.websocket.recv()))
+            try:
+                message = WsMessage(json.loads(await self.websocket.recv()))
+            except websockets.exceptions.ConnectionClosedError:
+                self.loop.create_task(self.get_event("on_winerp_disconnect")())
+
             if message.type.success and not self.authorized:
                 logger.info("Authorized Successfully")
+                self.loop.create_task(self.get_event("on_winerp_ready")())
                 self.authorized = True
 
             elif message.type.request:
@@ -137,10 +157,12 @@ class Client:
                     return
                 logger.info("Fulfilling request @ route: %s" % message.route)
                 self.loop.create_task(self._fulfill_request(message))
+                self.loop.create_task(self.get_event("on_winerp_request")())
             
             elif message.type.response:
                 logger.info("Received a response from server @ uuid: %s" % message.uuid)
                 self.loop.create_task(self._dispatch(message))
+                self.loop.create_task(self.get_event("on_winerp_response")())
 
             elif message.type.error:
                 logger.warning("Failed to fulfill request: %s" % message.error)
@@ -204,3 +226,14 @@ class Client:
                     )
         if not found:
             raise UUIDNotFoundError(f"UUID {_uuid} not found in listeners.")
+
+    def event(self, func):
+        if func.__name__ not in self.events:
+            raise NameError("Invalid winerp event")
+        
+        if not asyncio.iscoroutinefunction(func):
+            raise TypeError("Event function must be a coro.")
+
+        self.events[func.__name__] = func
+        return func
+
