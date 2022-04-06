@@ -3,13 +3,14 @@ import websockets
 import json
 import logging
 from .lib.message import WsMessage
-from .lib.payload import Payloads
+from .lib.payload import Payloads, MessagePayload
+from .lib.errors import *
 import uuid
 import traceback
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
-
+#logger.propagate = False
 
 class Client:
     def __init__(self, local_name, loop = None, port=13254):
@@ -22,16 +23,33 @@ class Client:
         
         self.loop = loop or asyncio.get_running_loop()
         self.authorized = False
+    
+    @property
+    def url(self):
+        '''
+        Returns back the url of the websocket.
+        '''
+        return self.uri
 
     async def send_message(self, data):
+        if not isinstance(data, dict):
+            data = data.to_dict()
         await self.websocket.send(json.dumps(data))
+    
+    def __send_message(self, data):
+        self.loop.create_task(self.send_message(data))
         
     async def start(self):
         if self.websocket is None or self.websocket.closed:
             logger.info("Connecting to Websocket")
             self.websocket = await websockets.connect(self.uri, close_timeout=0, ping_interval=None)
             logger.info("Connected to Websocket")
-            await self.send_message({"type": Payloads.verification, "id":self.local_name})
+            payload = MessagePayload(
+                type = Payloads.verification,
+                id = self.local_name,
+                uuid = str(uuid.uuid4())
+            )
+            await self.send_message(payload)
             logger.info("Verification request sent")
             self.loop.create_task(self.__on_message())
             logger.info("Listening to messages")
@@ -44,7 +62,7 @@ class Client:
                 raise ValueError("Route name already exists!")
             
             if not asyncio.iscoroutinefunction(func):
-                raise RuntimeError("Route function must be a coro.")
+                raise InvalidRouteType("Route function must be a coro.")
             
             self.routes[name or func.__name__] = func
             return func
@@ -78,71 +96,68 @@ class Client:
             `asyncio.TimeoutError`: If the response is not received within the timeout.
         '''
         if self.websocket is not None and self.websocket.open:
+            if not self.authorized:
+                raise UnauthorizedError("Client is not authorized!")
+            
             logger.info("Requesting IPC Server for %r with data %r", route, kwargs)
         
             _uuid = str(uuid.uuid4())
-            payload = {
-                "uuid": _uuid,
-                "type": Payloads.request,
-                "id":self.local_name,
-                "destination": source,
-                "route": route,
-                "data": kwargs
-            }
-            logger.debug("Client > %r", payload)
+            payload = MessagePayload(
+                type = Payloads.request,
+                id = self.local_name,
+                destination = source,
+                route = route,
+                data = kwargs,
+                uuid = _uuid
+            )
 
             await self.send_message(payload)
             recv = await self.get_response(_uuid, self.loop, timeout=timeout)
-            logger.debug("Client < %r", recv)
             return recv
 
     async def __on_message(self):
         while True:
             message = WsMessage(json.loads(await self.websocket.recv()))
-            if message.type.success and message.data["details"] == "Authorized":
+            if message.type.success and not self.authorized:
                 logger.info("Authorized Successfully")
                 self.authorized = True
 
             elif message.type.request:
                 if message.route not in self.routes:
                     logger.info("Failed to fulfill request, route not found")
-                    self.loop.create_task(self.send_message({
-                        "type": Payloads.error,
-                        "error": "Route does not exist!",
-                        "traceback": "Route does not exist!",
-                        "id": self.local_name,
-                        "destination": message.id,
-                        "uuid": message.uuid})
+                    payload = MessagePayload(
+                        type = Payloads.error,
+                        id = self.local_name,
+                        data = "Route not found",
+                        traceback = "Route not found",
+                        destination = message.id,
+                        uuid = message.uuid
                     )
+                    self.__send_message(payload)
                     return
-                logger.info("Fulfilling request @ route: %s", message.route)
+                logger.info("Fulfilling request @ route: %s" % message.route)
                 self.loop.create_task(self._fulfill_request(message))
             
             elif message.type.response:
-                logger.info(f"Received a response from server @ uuid: {message.uuid}")
+                logger.info("Received a response from server @ uuid: %s" % message.uuid)
                 self.loop.create_task(self._dispatch(message))
 
             elif message.type.error:
-                logger.warning(f"Failed to fulfill request: {message.error}")
+                logger.warning("Failed to fulfill request: %s" % message.error)
+                if message.uuid is not None:
+                    self.loop.create_task(self._dispatch(message))
     
     async def _fulfill_request(self, message: WsMessage):
         route = message.route
         func = self.routes[route]
         data = message.data
-        payload = {
-            "uuid": message.uuid,
-            "type": Payloads.response,
-            "id": self.local_name,
-            "destination": message.destination,
-            "data": None,
-            "error": None,
-            "traceback": None
-        }
+        payload = MessagePayload().from_message(message)
+        payload.type = Payloads.response
+        payload.id = self.local_name
+        payload.data = {}
+
         try:
-            result = await func(**data)
-            if not isinstance(result, dict):
-                result = { 'result': result }
-            payload["data"] = result
+            payload.data = await func(**data)
         except Exception as error:
             logger.exception(error)
             etype = type(error)
@@ -150,22 +165,23 @@ class Client:
             lines = traceback.format_exception(etype, error, trace)
             traceback_text = ''.join(lines)
 
-            payload["type"] = Payloads.error
-            payload["error"] = str(error)
-            payload["traceback"] = traceback_text
+            payload.type = Payloads.error
+            payload.data = str(error)
+            payload.traceback = traceback_text
         finally:
-            self.loop.create_task(self.send_message(payload))
+            self.__send_message(payload)
     
     async def _dispatch(self, msg: WsMessage):
         data = msg.data
         logger.debug('Dispatch -> %r', data)
         _uuid = msg.uuid
         if _uuid is None:
-            raise RuntimeError('UUID is missing.')
+            raise MissingUUIDError('UUID is missing.')
         
-        logger.debug('Listeners: %r', self.listeners)
+        found = False
         for key, val in self.listeners.items():
             if key == _uuid:
+                found = True
                 check = val[0]
                 future: asyncio.Future = val[1]
 
@@ -175,9 +191,16 @@ class Client:
                 if check is None:
                     check = _check
                 
-                if check(data):
-                    future.set_result(data)
+                if not msg.type.error:
+                    if check(data):
+                        future.set_result(data)
+                    else:
+                        future.set_exception(
+                            CheckFailureError(f"Check failed for UUID {_uuid}")
+                        )
                 else:
                     future.set_exception(
-                        RuntimeError(f'Check failed for UUID {_uuid}')
+                        ClientRuntimeError(msg.data)
                     )
+        if not found:
+            raise UUIDNotFoundError(f"UUID {_uuid} not found in listeners.")

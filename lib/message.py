@@ -5,6 +5,9 @@ class WsMessage:
     def __init__(self, message: dict):
         self._message = message
     
+    def __repr__(self) -> str:
+        return f'<winerp.WsMessage uuid={self.uuid} type={self.type.__repr__()}>'
+    
     @property
     def type(self) -> PayloadTypes:
         '''
@@ -17,21 +20,21 @@ class WsMessage:
         '''
         Returns the id of the bot.
         '''
-        return self._message["id"]
+        return self._message.get("id")
     
     @property
     def destination(self) -> str:
         '''
         Returns the destination of the message.
         '''
-        return self._message["destination"]
+        return self._message.get("destination")
     
     @property
     def route(self) -> str:
         '''
         Returns the route of the message.
         '''
-        return self._message["route"]
+        return self._message.get("route")
     
     @property
     def uuid(self) -> str:
@@ -41,11 +44,11 @@ class WsMessage:
         return self._message.get("uuid")
     
     @property
-    def data(self) -> dict:
+    def data(self) -> any:
         '''
         Returns the data associated with the message.
         '''
-        return self._message["data"]
+        return self._message.get("data")
     
     @property
     def error(self) -> str:
@@ -77,7 +80,7 @@ class WsMessage:
 
     def to_dict(self) -> dict:
         '''
-        Returns the message as a dictionary.
+        Returns the message as a `dict` type.
         '''
         return {
             'type': self.type,
