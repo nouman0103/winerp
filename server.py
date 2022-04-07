@@ -18,6 +18,7 @@ class Server:
         self.console_output = True
         self.active_clients = {}
         self.pending_verification = {}
+        self.on_hold_connections = {}
         
     def __on_client_connect(self, client, server):
         logger.info("Client connected with id %s" % client['address'][1])
@@ -28,10 +29,26 @@ class Server:
         for cid, each_client in self.active_clients.items():
             if each_client["id"] == client["address"][1]:
                 del self.active_clients[cid]
+                if cid in self.on_hold_connections:
+                    logger.info("On Hold Client moved to active client with connection id %s and local id %s" % (self.on_hold_connections[cid]['id'], cid))
+                    self.active_clients[cid] = self.on_hold_connections[cid]
+                    self.__send_message(
+                        self.on_hold_connections[cid]["client"],
+                        MessagePayload(type=Payloads.success, data="Authorized.")
+                    )
+                    del self.pending_verification[self.on_hold_connections[cid]["id"]]
+                    del self.on_hold_connections[cid]
+                return
+        
+        for cid, each_client in self.on_hold_connections.items():
+            if each_client["id"] == client["address"][1]:
+                del self.on_hold_connections[cid]
                 return
 
         if client["address"][1] in self.pending_verification:
             del self.pending_verification[client["address"][1]]
+
+        
     
     def __send_message(self, client, message):
         if not isinstance(message, dict):
@@ -55,10 +72,13 @@ class Server:
         payload = MessagePayload().from_message(msg)
         if msg.type.verification:
             if msg.id in self.active_clients:
+                logger.info("Duplicate Client on hold with connection id %s and local id %s" % (client['address'][1], msg.id))
+                payload.uuid = None
                 payload.type = Payloads.error
                 payload.data = "Already authorized."
                 payload.traceback = "Already authorized."
                 self.__send_error(client, payload)
+                self.on_hold_connections[msg.id] = {"client": client, "id": client["address"][1]}
 
             elif client["address"][1] in self.pending_verification:
                 logger.info("Client verified with connection id %s and local id %s" % (client['address'][1], msg.id))
@@ -75,6 +95,10 @@ class Server:
                 payload.traceback = "Not authorized."
                 self.__send_error(client, payload)
                 return
+                
+        if msg.type.ping:
+            logger.debug("Received Ping Message from client %s" % client['address'][1])
+
 
         if msg.type.request:
             logger.debug("Received Request Message from client %s" % client['address'][1])
