@@ -1,4 +1,5 @@
 import asyncio
+from aioredis import ConnectionClosedError
 import websockets
 import json
 import logging
@@ -9,12 +10,9 @@ import uuid
 import traceback
 
 logger = logging.getLogger(__name__)
-logging.basicConfig()
-logger.propagate = False
 
 class Client:
     def __init__(self, local_name, loop = None, port=13254):
-        logger.setLevel(logging.DEBUG)
         self.uri = f"ws://localhost:{port}"        
         self.local_name = local_name
         self.websocket = None
@@ -135,6 +133,7 @@ class Client:
                 message = WsMessage(json.loads(await self.websocket.recv()))
             except websockets.exceptions.ConnectionClosedError:
                 self.loop.create_task(self.get_event("on_winerp_disconnect")())
+                break
 
             if message.type.success and not self.authorized:
                 logger.info("Authorized Successfully")
@@ -164,7 +163,7 @@ class Client:
                 self.loop.create_task(self.get_event("on_winerp_response")())
 
             elif message.type.error:
-                logger.warning("Failed to fulfill request: %s" % message.error)
+                logger.debug("Failed to fulfill request: %s" % message.error)
                 if message.uuid is not None:
                     self.loop.create_task(self._dispatch(message))
     
