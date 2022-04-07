@@ -8,6 +8,7 @@ class Payloads:
     request = 2
     response = 3
     error = 4
+    ping = 5
 
 class PayloadTypes:
 
@@ -21,6 +22,7 @@ class PayloadTypes:
         `request`: Request for a route.
         `response`: Response to a request.
         `error`: Error response.
+        `ping`: Ping message
         '''
         self._type = type
     
@@ -61,6 +63,13 @@ class PayloadTypes:
         Returns `True` if the message is an error message.
         '''
         return self._type == Payloads.error
+
+    @property
+    def ping(self) -> bool:
+        '''
+        Returns `True` if the message is a ping message.
+        '''
+        return self._type == Payloads.ping
 
 
 class MessagePayload:
