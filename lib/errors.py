@@ -24,5 +24,10 @@ class InvalidRouteType(Exception):
 
 
 class ClientRuntimeError(Exception):
-    '''Raised when the client returns back `Payloads.error`.'''
+    '''Raised when the server returns back `Payloads.error`.'''
     pass
+
+class ClientNotReadyError(Exception):
+    '''Raised when the client is not ready to send requests'''
+    pass
+
