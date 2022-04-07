@@ -6,17 +6,16 @@ import json
 
 import logging
 logger = logging.getLogger(__name__)
-logging.basicConfig()
-#logger.propagate = False
+
 
 class Server:
     def __init__(self, port=13254):
-        logger.setLevel(logging.DEBUG)
+        logger.setLevel(logging.INFO)
         self.websocket = WebsocketServer(host='127.0.0.1', port=port)
         self.websocket.set_fn_new_client(self.__on_client_connect)
         self.websocket.set_fn_message_received(self.__on_message)
         self.websocket.set_fn_client_left(self.__on_client_disconnect)
-
+        self.console_output = True
         self.active_clients = {}
         self.pending_verification = {}
         
@@ -78,7 +77,7 @@ class Server:
                 return
 
         if msg.type.request:
-            logger.info("Received Request Message from client %s" % client['address'][1])
+            logger.debug("Received Request Message from client %s" % client['address'][1])
             if msg.id == msg.destination:
                 payload.type = Payloads.error
                 payload.data = "Source and destination are the same."
@@ -99,10 +98,10 @@ class Server:
                     self.active_clients[msg.destination]["client"],
                     payload
                 )
-                logger.info("Request Message Forwarded to %s" % self.active_clients[msg.destination]["client"]['address'][1])
+                logger.debug("Request Message Forwarded to %s" % self.active_clients[msg.destination]["client"]['address'][1])
 
         if msg.type.response or msg.type.error:
-            logger.info("Received Response Message from client %s" % client['address'][1])
+            logger.debug("Received Response Message from client %s" % client['address'][1])
             if msg.destination not in self.active_clients:
                 self.__send_error(client, "Destination could not be found!", uuid=msg.uuid)
 
@@ -112,7 +111,7 @@ class Server:
                 self.active_clients[msg.destination]["client"],
                 payload
             )
-            logger.info("Response forwarded to %s" % self.active_clients[msg.destination]["client"]['address'][1])
+            logger.debug("Response forwarded to %s" % self.active_clients[msg.destination]["client"]['address'][1])
             
             
     def start(self):
