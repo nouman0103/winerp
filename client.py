@@ -21,6 +21,7 @@ class Client:
         
         self.loop = loop or asyncio.get_running_loop()
         self.authorized = False
+        self.on_hold = False
         self.events = {
             "on_winerp_connect": None,
             "on_winerp_ready": None,
@@ -49,7 +50,7 @@ class Client:
     
     def __send_message(self, data):
         self.loop.create_task(self.send_message(data))
-        
+    
     async def start(self):
         if self.websocket is None or self.websocket.closed:
             logger.info("Connecting to Websocket")
@@ -81,6 +82,14 @@ class Client:
             
         return route_decorator
     
+    async def ping(self):
+        if self.on_hold or self.websocket is None or not self.websocket.open:
+            raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
+        if not self.authorized:
+            raise UnauthorizedError("Client is not authorized!")
+
+        await self.send_message(MessagePayload(type=Payloads.ping))
+
     def get_response(
         self,
         _uuid: str,
@@ -108,6 +117,8 @@ class Client:
             `asyncio.TimeoutError`: If the response is not received within the timeout.
         '''
         if self.websocket is not None and self.websocket.open:
+            if self.on_hold:
+                raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
             if not self.authorized:
                 raise UnauthorizedError("Client is not authorized!")
             
@@ -126,6 +137,9 @@ class Client:
             await self.send_message(payload)
             recv = await self.get_response(_uuid, self.loop, timeout=timeout)
             return recv
+        
+        else:
+            raise ClientNotReadyError("The client has not been started or has disconnected")
 
     async def __on_message(self):
         while True:
@@ -139,6 +153,7 @@ class Client:
                 logger.info("Authorized Successfully")
                 self.loop.create_task(self.get_event("on_winerp_ready")())
                 self.authorized = True
+                self.on_hold = False
 
             elif message.type.request:
                 if message.route not in self.routes:
@@ -163,7 +178,12 @@ class Client:
                 self.loop.create_task(self.get_event("on_winerp_response")())
 
             elif message.type.error:
-                logger.debug("Failed to fulfill request: %s" % message.error)
+                if message.data == "Already authorized.":
+                    self.on_hold = True
+                    logger.warn("Another client is already connected. Requests will be enabled when the other is disconnected.")
+                else:
+                    logger.debug("Failed to fulfill request: %s" % message.data)
+
                 if message.uuid is not None:
                     self.loop.create_task(self._dispatch(message))
     
