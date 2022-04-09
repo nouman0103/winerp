@@ -72,7 +72,7 @@ class Server:
         payload = MessagePayload().from_message(msg)
         if msg.type.verification:
             if msg.id in self.active_clients:
-                logger.info("Duplicate Client on hold with connection id %s and local id %s" % (client['address'][1], msg.id))
+                logger.info("Connection from duplicate client has benn put on hold connection id %s and local id %s" % (client['address'][1], msg.id))
                 payload.uuid = None
                 payload.type = Payloads.error
                 payload.data = "Already authorized."
@@ -95,10 +95,18 @@ class Server:
                 payload.traceback = "Not authorized."
                 self.__send_error(client, payload)
                 return
-                
+        
+        if msg.type.information:
+            logger.debug("Received Information Message from client %s" % client['address'][1])
+            payload.type = Payloads.information
+            if msg.route:
+                for client_id, client_obj in self.active_clients.items():
+                    if client_id in msg.route:
+                        self.__send_message(client_obj["client"], payload)
+            
+
         if msg.type.ping:
             logger.debug("Received Ping Message from client %s" % client['address'][1])
-
 
         if msg.type.request:
             logger.debug("Received Request Message from client %s" % client['address'][1])
