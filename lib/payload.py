@@ -9,6 +9,7 @@ class Payloads:
     response = 3
     error = 4
     ping = 5
+    information = 6
 
 class PayloadTypes:
 
@@ -70,6 +71,13 @@ class PayloadTypes:
         Returns `True` if the message is a ping message.
         '''
         return self._type == Payloads.ping
+
+    @property
+    def information(self) -> bool:
+        '''
+        Returns `True` if the message is an information message.
+        '''
+        return self._type == Payloads.information
 
 
 class MessagePayload:
