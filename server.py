@@ -100,10 +100,14 @@ class Server:
             logger.debug("Received Information Message from client %s" % client['address'][1])
             payload.type = Payloads.information
             if msg.route:
+                for destination in msg.route:
+                    if destination in self.active_clients:
+                        payload.destination = destination
+                        self.__send_message(self.active_clients[destination]["client"], payload)
+            else:
                 for client_id, client_obj in self.active_clients.items():
-                    if client_id in msg.route:
-                        self.__send_message(client_obj["client"], payload)
-            
+                    payload.destination = client_id
+                    self.__send_message(client_obj["client"], payload)
 
         if msg.type.ping:
             logger.debug("Received Ping Message from client %s" % client['address'][1])
