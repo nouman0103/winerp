@@ -157,9 +157,6 @@ class Client:
             if not self.authorized:
                 raise UnauthorizedError("Client is not authorized!")
 
-            if not destinations:
-                raise ValueError('Cannot send information packet without destinations'
-                )
             logger.info("Informing IPC Server to redirect to routes %s" % destinations)
             if not isinstance(destinations, list):
                 destinations = [destinations]
