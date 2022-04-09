@@ -1,4 +1,6 @@
 import asyncio
+from dis import dis
+from multiprocessing.sharedctypes import Value
 from aioredis import ConnectionClosedError
 import websockets
 import json
@@ -27,7 +29,8 @@ class Client:
             "on_winerp_ready": None,
             "on_winerp_disconnect": None,
             "on_winerp_request": None,
-            "on_winerp_response": None
+            "on_winerp_response": None,
+            "on_winerp_information": None,
         }
     
     async def __empty_event(self, *args, **kwargs):
@@ -122,7 +125,10 @@ class Client:
             if not self.authorized:
                 raise UnauthorizedError("Client is not authorized!")
             
-            logger.info("Requesting IPC Server for %r with data %r", route, kwargs)
+            if not route or not source:
+                raise ValueError("Missing required information for this request")
+
+            logger.info("Requesting IPC Server for %r", route)
         
             _uuid = str(uuid.uuid4())
             payload = MessagePayload(
@@ -140,6 +146,37 @@ class Client:
         
         else:
             raise ClientNotReadyError("The client has not been started or has disconnected")
+
+    async def inform(
+        self,
+        data: any,
+        destinations: list
+    ):
+
+        if self.websocket is not None and self.websocket.open:
+            if self.on_hold:
+                raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
+            if not self.authorized:
+                raise UnauthorizedError("Client is not authorized!")
+
+            if not destinations:
+                raise ValueError('Cannot send information packet without destinations'
+                )
+            logger.info("Informing IPC Server to redirect to routes %s" % destinations)
+            if not isinstance(destinations, list):
+                destinations = [destinations]
+
+            payload = MessagePayload(
+                type = Payloads.information,
+                id = self.local_name,
+                route = destinations,
+                data = data,
+            )
+
+            await self.send_message(payload)
+        else:
+            raise ClientNotReadyError("The client has not been started or has disconnected")
+
 
     async def __on_message(self):
         while True:
@@ -186,6 +223,13 @@ class Client:
 
                 if message.uuid is not None:
                     self.loop.create_task(self._dispatch(message))
+
+            elif message.type.information:
+                if message.data:
+                    logger.info("Received an information bit from client: %s" % message.id)
+                    self.loop.create_task(self.get_event("on_winerp_information")(message.data, message.id))
+                
+
     
     async def _fulfill_request(self, message: WsMessage):
         route = message.route
