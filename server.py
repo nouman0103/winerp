@@ -106,8 +106,9 @@ class Server:
                         self.__send_message(self.active_clients[destination]["client"], payload)
             else:
                 for client_id, client_obj in self.active_clients.items():
-                    payload.destination = client_id
-                    self.__send_message(client_obj["client"], payload)
+                    if client_id != payload.id:
+                        payload.destination = client_id
+                        self.__send_message(client_obj["client"], payload)
 
         if msg.type.ping:
             logger.debug("Received Ping Message from client %s" % client['address'][1])
