@@ -29,6 +29,7 @@ class Client:
             "on_winerp_request": None,
             "on_winerp_response": None,
             "on_winerp_information": None,
+            "on_winerp_error": None
         }
     
     async def __empty_event(self, *args, **kwargs):
@@ -215,6 +216,7 @@ class Client:
                     logger.warn("Another client is already connected. Requests will be enabled when the other is disconnected.")
                 else:
                     logger.debug("Failed to fulfill request: %s" % message.data)
+                    self.loop.create_task(self.get_event("on_winerp_error")(message.data))
 
                 if message.uuid is not None:
                     self.loop.create_task(self._dispatch(message))
@@ -237,8 +239,10 @@ class Client:
 
         try:
             payload.data = await func(**data)
+            json.dumps(payload.data) #Ensuring data is serializable
         except Exception as error:
             logger.exception(error)
+            self.loop.create_task(self.get_event("on_winerp_error")(error))
             etype = type(error)
             trace = error.__traceback__
             lines = traceback.format_exception(etype, error, trace)
