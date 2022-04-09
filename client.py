@@ -1,6 +1,4 @@
 import asyncio
-from dis import dis
-from multiprocessing.sharedctypes import Value
 from aioredis import ConnectionClosedError
 import websockets
 import json
