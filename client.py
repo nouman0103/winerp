@@ -1,4 +1,5 @@
 import asyncio
+from ctypes import Union
 from aioredis import ConnectionClosedError
 import websockets
 import json
@@ -84,23 +85,32 @@ class Client:
             
         return route_decorator
     
-    async def ping(self):
+    async def ping(self, client = None, timeout: int = 60) -> bool:
         if self.on_hold or self.websocket is None or not self.websocket.open:
             raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
         if not self.authorized:
             raise UnauthorizedError("Client is not authorized!")
+        logger.debug("Pinging IPC Server")
+        
+        _uuid = str(uuid.uuid4())
+        payload = MessagePayload(
+            type = Payloads.ping,
+            id = self.local_name,
+            destination = client,
+            uuid = _uuid
+        )
+        await self.send_message(payload)
+        resp = await self.__get_response(_uuid, self.loop, timeout=timeout)
+        return resp.get("success", False)
 
-        await self.send_message(MessagePayload(type=Payloads.ping))
-
-    def get_response(
+    def __get_response(
         self,
         _uuid: str,
         loop: asyncio.AbstractEventLoop,
-        check = None,
         timeout: int = 60
     ):
         future = loop.create_future()
-        self.listeners[_uuid] = (check, future)
+        self.listeners[_uuid] = (None, future)
         return asyncio.wait_for(future, timeout, loop=loop)
 
     async def request(
@@ -140,7 +150,7 @@ class Client:
             )
 
             await self.send_message(payload)
-            recv = await self.get_response(_uuid, self.loop, timeout=timeout)
+            recv = await self.__get_response(_uuid, self.loop, timeout=timeout)
             return recv
         
         else:
@@ -187,6 +197,10 @@ class Client:
                 self.loop.create_task(self.get_event("on_winerp_ready")())
                 self.authorized = True
                 self.on_hold = False
+
+            elif message.type.ping:
+                logger.debug("Received a ping from server")
+                self.loop.create_task(self._dispatch(message))
 
             elif message.type.request:
                 if message.route not in self.routes:
