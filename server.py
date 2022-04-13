@@ -112,6 +112,16 @@ class Server:
 
         if msg.type.ping:
             logger.debug("Received Ping Message from client %s" % client['address'][1])
+            payload.type = Payloads.ping
+            if (msg.destination is not None and msg.destination in self.active_clients) or msg.destination is None:
+                payload.data = {"success": True}
+            else:
+                payload.data = {"success": False}
+                
+            self.__send_message(
+                client,
+                payload
+            )
 
         if msg.type.request:
             logger.debug("Received Request Message from client %s" % client['address'][1])
