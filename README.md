@@ -86,7 +86,7 @@ bot.run("TOKEN")
 
 # Features
 
- - Fast: Minimum Response Time Recorded: `0.001s`.
+ - Fast: Minimum Response Time Recorded: **< 2ms**.
  - Reliable, Stable and Easy to integrate.
  - A single hosted server can be used to serve all clients on the machine.
  - No limitation on number of connected clients.
