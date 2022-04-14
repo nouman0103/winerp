@@ -15,6 +15,7 @@ class Server:
     All requests and responses pass through the server
 
     If the library is installed using PyPi, you can also use terminal to start server using `winerp --port 1234`
+    
     Parameters
     -----------
     port: Optional[:class:`int`]
