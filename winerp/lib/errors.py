@@ -9,7 +9,7 @@ class UUIDNotFoundError(Exception):
 
 
 class MissingUUIDError(Exception):
-    '''Raised when the message does not have a `uuid` key.'''
+    '''Raised when the message does not have a ``uuid`` key.'''
     pass
 
 
@@ -24,7 +24,7 @@ class InvalidRouteType(Exception):
 
 
 class ClientRuntimeError(Exception):
-    '''Raised when the server returns back `Payloads.error`.'''
+    '''Raised when the server returns back an error.'''
     pass
 
 class ClientNotReadyError(Exception):

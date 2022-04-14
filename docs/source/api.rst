@@ -33,22 +33,6 @@ Server
 .. autoclass:: winerp.server.Server
    :members:
 
-WsMessage
-~~~~~~~~~
-
-.. attributetable:: winerp.lib.message.WsMessage
-
-.. autoclass:: winerp.lib.message.WsMessage
-   :members:
-
-Payload
-~~~~~~~
-
-.. attributetable:: winerp.lib.payload.PayloadTypes
-
-.. autoclass:: winerp.lib.payload.PayloadTypes
-   :members:
-
 Errors
 ~~~~~~
 
