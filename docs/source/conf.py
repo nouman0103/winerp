@@ -73,7 +73,7 @@ html_static_path = []
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'friendly'
 
-html_search_scorer = 'source/_static/scorer.js'
+html_search_scorer = '_static/scorer.js'
 
 html_js_files = [
   'custom.js',
