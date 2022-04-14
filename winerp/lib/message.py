@@ -1,7 +1,9 @@
 from .payload import PayloadTypes
 
 class WsMessage:
-
+    r"""
+    Represents the message received from the server.
+    """
     def __init__(self, message: dict):
         self._message = message
     
@@ -11,49 +13,49 @@ class WsMessage:
     @property
     def type(self) -> PayloadTypes:
         '''
-        Returns the type of the message.
+        :class:`~winerp.lib.payload.PayloadTypes`: Returns the type of the message.
         '''
         return PayloadTypes(self._message["type"])
     
     @property
     def id(self) -> int:
         '''
-        Returns the id of the bot.
+        :class:`int`: Returns the id of the bot.
         '''
         return self._message.get("id")
     
     @property
     def destination(self) -> str:
         '''
-        Returns the destination of the message.
+        :class:`str`: Returns the destination of the message.
         '''
         return self._message.get("destination")
     
     @property
     def route(self) -> str:
         '''
-        Returns the route of the message.
+        :class:`str`: Returns the route of the message.
         '''
         return self._message.get("route")
     
     @property
     def uuid(self) -> str:
         '''
-        Returns the unique id associated with this message.
+        :class:`str`: Returns the unique id associated with this message.
         '''
         return self._message.get("uuid")
     
     @property
     def data(self) -> any:
         '''
-        Returns the data associated with the message.
+        :class:`Any`: Returns the data associated with the message.
         '''
         return self._message.get("data")
     
     @property
     def error(self) -> str:
         '''
-        Returns the error associated with the message.
+        :class:`str`: Returns the error associated with the message.
         '''
         return self._message.get("error")
     
@@ -67,7 +69,7 @@ class WsMessage:
     @property
     def traceback(self) -> str:
         '''
-        Returns the error associated with the message.
+        :class:`str`: Returns the error associated with the message.
         '''
         return self._message.get("traceback")
     
@@ -80,7 +82,7 @@ class WsMessage:
 
     def to_dict(self) -> dict:
         '''
-        Returns the message as a `dict` type.
+        :class:`dict`: Returns the message as a `dict` type.
         '''
         return {
             'type': self.type,

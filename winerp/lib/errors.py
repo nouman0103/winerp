@@ -4,7 +4,7 @@ class UnauthorizedError(Exception):
 
 
 class UUIDNotFoundError(Exception):
-    '''Raised when '''
+    '''Raised when the specific UUID is not found in listeners.'''
     pass
 
 
