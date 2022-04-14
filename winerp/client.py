@@ -1,4 +1,5 @@
 import asyncio
+from types import FunctionType
 import websockets
 import json
 import logging
@@ -42,8 +43,14 @@ class Client:
         self.websocket = None
         self.routes = {}
         self.listeners = {}
-        
-        self.loop = loop or asyncio.get_running_loop()
+        if loop is None:
+            try:
+                self.loop = asyncio.get_running_loop()
+            except:
+                self.loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self.loop)
+        else:
+            self.loop = loop
         self._authorized = False
         self._on_hold = False
         self.events = {
@@ -72,16 +79,9 @@ class Client:
     @property
     def on_hold(self) -> bool:
         '''
-        :class:`bool`: Returns if the client is on hold by the server.
+        :class:`bool`: Returns True if the client is on hold by the server. A client is put on hold if a client of same local name is already connected to the server.
         '''
         return self._on_hold
-
-    @property
-    def url(self) -> str:
-        '''
-        :class:`str`: Returns back the url of the websocket.
-        '''
-        return self.uri
 
     async def send_message(self, data):
         if not isinstance(data, dict):
@@ -94,8 +94,7 @@ class Client:
     async def start(self) -> None:
         '''|coro|
 
-        Starts the client. Upon start the client sends a :class:`~winerp.lib.payload.Payloads.verification` request to the 
-        server.
+        Connects the client to the server.
 
         Raises
         -------
@@ -144,7 +143,12 @@ class Client:
             self.routes[name or func.__name__] = func
             return func
             
-        return route_decorator
+        if isinstance(name, FunctionType):
+            func = name
+            name = name.__name__
+            return route_decorator(func)
+        else:
+            return route_decorator
     
     async def ping(self, client = None, timeout: int = 60) -> bool:
         '''|coro|
@@ -161,6 +165,7 @@ class Client:
         Returns
         --------
             :class:`bool`
+                If the ping is successful, it returns True.
         '''
         if self._on_hold or self.websocket is None or not self.websocket.open:
             raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
@@ -195,7 +200,7 @@ class Client:
         source: str,
         timeout: int = 60,
         **kwargs
-    ) -> WsMessage.data:
+    ) -> any:
         '''|coro|
 
         Requests the server for a response.
@@ -225,7 +230,7 @@ class Client:
         
         Returns
         --------
-            :class:`~winerp.lib.message.WsMessage.data`
+            :class:`any`
                 The data associated with the message.
         '''
         if self.websocket is not None and self.websocket.open:
@@ -263,7 +268,10 @@ class Client:
     ):
         '''|coro|
 
-        Informs the IPC server to redirect the routes.
+        Sends data to other connected clients. There is no tracking of the data so there won't be any error
+        if it doesn't reach its specificied destination.
+
+        The data is sent to all connected clients if the destinations list is empty.
 
         Parameters
         -----------
@@ -430,11 +438,11 @@ class Client:
         The available events are:
             | ``on_winerp_connect``: The client has successfully connected to the server.
             | ``on_winerp_ready``: The client is ready to recieve and send requests.
-            | ``on_winerp_disconnect``: The client is disconnected from the server.
+            | ``on_winerp_disconnect``: The client has disconnected from the server.
             | ``on_winerp_request``: The server sent new request.
             | ``on_winerp_response``: The server sent back a response to a previous request.
-            | ``on_winerp_information``: Information payload.
-            | ``on_winerp_error``: Error handler.
+            | ``on_winerp_information``: The server sent some data sourced by a client.
+            | ``on_winerp_error``: An error occured during request processing.
         
         Raises
         -------
