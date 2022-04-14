@@ -155,7 +155,7 @@ class Client:
         -------
             ClientNotReadyError
                 The client is currently not ready to send or accept requests.
-            UnauthotizedError
+            UnauthorizedError
                 The client isn't authorized by the server.
         
         Returns
