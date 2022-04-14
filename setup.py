@@ -1,5 +1,14 @@
 from setuptools import setup
 
+extras = {
+    'docs': [
+        'sphinx==4.4.0',
+        'sphinxcontrib_trio==1.1.2',
+        'sphinxcontrib-websupport',
+        'typing-extensions',
+    ],
+}
+
 setup(
     name="winerp",
     version="1.1.1",
@@ -31,5 +40,6 @@ setup(
             ]
         },
     install_requires=["websockets", "websocket-server"],
+    extra_requires=extras,
     python_requires=">=3.6",
 )
