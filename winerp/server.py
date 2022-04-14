@@ -11,8 +11,10 @@ logger.setLevel(logging.INFO)
 class Server:
     """
     Represents a winerp Server.
-    This class is used to interact with all the clients
+    This class is used as the central communication center for all connected clients.
+    All requests and responses pass through the server
 
+    If the library is installed using PyPi, you can also use terminal to start server using `winerp --port 1234`
     Parameters
     -----------
     port: Optional[:class:`int`]
@@ -30,7 +32,14 @@ class Server:
         self.active_clients = {}
         self.pending_verification = {}
         self.on_hold_connections = {}
-        
+    
+    @property
+    def client_count(self) -> int:
+        '''
+        :class:`int`: Returns the number of connected clients
+        '''
+        return len(self.active_clients)
+
     def __on_client_connect(self, client, server):
         logger.info("Client connected with id %s" % client['address'][1])
         self.pending_verification[client["address"][1]] = client
