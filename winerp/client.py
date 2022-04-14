@@ -269,7 +269,7 @@ class Client:
         '''|coro|
 
         Sends data to other connected clients. There is no tracking of the data so there won't be any error
-        if it doesn't reach its specificied destination.
+        if it doesn't reach its specified destination.
 
         The data is sent to all connected clients if the destinations list is empty.
 
