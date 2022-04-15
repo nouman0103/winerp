@@ -1,38 +1,35 @@
 # winerp
-An IPC based on Websockets. Fast, Stable, and Reliable, perfect for communication between your processes or discord.py bots.
+An IPC based on Websockets. Fast, Stable, and easy-to-use, for inter-communication between your processes or discord.py bots.
+
+### Key Features
+
+ - **Fast** with minimum recorded response time being `< 2ms`
+ - Lightweight, Stable and Easy to integrate.
+ - No limitation on number of connected clients. 
 
 ## Installation
 Stable:
 ```py
-pip install winerp
+pip install -U winerp
 ```
 Main branch (can be unstable/buggy):
 ```py
 pip install git+https://www.github.com/BlackThunder01001/winerp
 ```
 
-## Working:
-This library uses a central server for communication between multiple processes. You can connect a large number of clients for sharing data, and data can be shared between any connected client.
+### Working:
+This library uses a central server for communication between multiple clients. You can connect a large number of clients for sharing data, and data can be shared between any connected client.
 
 
 ## Example Usage:
 
-### Server Side:
-```py
-import winerp
-
-server = winerp.Server(port=8080)
-server.start()
-```
+Start the server on terminal using `$ winerp --port 8080`. You can also start the server using `winerp.Server`
 
 ### Client 1 (`some-random-bot`):
 ```py
-
+import winerp
 import discord
 from discord.ext.commands import Bot
-
-import winerp
-
 bot = Bot(command_prefix="!", intents=discord.Intents.all())
 
 bot.ipc = winerp.Client(local_name = "some-random-bot", loop = bot.loop, port=8080)
@@ -59,11 +56,9 @@ bot.run("TOKEN")
 
 ### Client 2 (`another-bot`)
 ```py
+import winerp
 import discord
 from discord.ext.commands import Bot
-
-import winerp
-
 bot = Bot(command_prefix="?", intents=discord.Intents.all())
 
 bot.ipc = winerp.Client(local_name = "another-bot", loop = bot.loop, port=8080)
@@ -83,13 +78,4 @@ async def get_some_data():
 bot.loop.create_task(bot.ipc.start())
 bot.run("TOKEN")
 ```
-
-# Features
-
- - Fast: Minimum Response Time Recorded: **< 2ms**.
- - Reliable, Stable and Easy to integrate.
- - A single hosted server can be used to serve all clients on the machine.
- - No limitation on number of connected clients.
- - Inter bot-communication possible.
- - Inter server-communication possible.
 
