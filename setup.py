@@ -11,22 +11,25 @@ extras = {
 
 setup(
     name="winerp",
-    version="1.1.1",
+    version="1.1.2",
     description="Websocket based IPC for discord.py bots",
     long_description="...",
     long_description_content_type="text/markdown",
     url="https://github.com/BlackThunder01001/winerp",
     project_urls={
         "Bug Tracker": "https://github.com/BlackThunder01001/winerp/issues",
+        "Documentation": "https://winerp.readthedocs.io/en/latest/",
     },
     author="BlackThunder",
     author_email="nouman0103@gmail.com",
     license="MIT",
     classifiers=[
         "License :: OSI Approved :: MIT License",
+        "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.6",
         "Operating System :: OS Independent",
+        "Typing :: Typed",
         
     ],
     packages=["winerp"],
