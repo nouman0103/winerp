@@ -53,15 +53,15 @@ class Client:
             self.loop = loop
         self._authorized = False
         self._on_hold = False
-        self.events = {
-            "on_winerp_connect": None,
-            "on_winerp_ready": None,
-            "on_winerp_disconnect": None,
-            "on_winerp_request": None,
-            "on_winerp_response": None,
-            "on_winerp_information": None,
-            "on_winerp_error": None
-        }
+        self.events = [
+            "on_winerp_connect",
+            "on_winerp_ready",
+            "on_winerp_disconnect",
+            "on_winerp_request",
+            "on_winerp_response",
+            "on_winerp_information",
+            "on_winerp_error"
+        ]
     
     async def __empty_event(self, *args, **kwargs):
         ...
@@ -108,7 +108,7 @@ class Client:
         if self.websocket is None or self.websocket.closed:
             logger.info("Connecting to Websocket")
             self.websocket = await websockets.connect(self.uri, close_timeout=0, ping_interval=None)
-            self.loop.create_task(self.get_event("on_winerp_connect")())
+            self._dispatch_event('winerp_connect')
             logger.info("Connected to Websocket")
             payload = MessagePayload(
                 type = Payloads.verification,
@@ -117,7 +117,7 @@ class Client:
             )
             await self.send_message(payload)
             logger.info("Verification request sent")
-            self.loop.create_task(self.__on_message())
+            asyncio.create_task(self.__on_message())
             logger.info("Listening to messages")
         else:
             raise ConnectionError("Websocket is already connected!")
@@ -318,12 +318,12 @@ class Client:
             try:
                 message = WsMessage(json.loads(await self.websocket.recv()))
             except websockets.exceptions.ConnectionClosedError:
-                self.loop.create_task(self.get_event("on_winerp_disconnect")())
+                self._dispatch_event('winerp_disconnect')
                 break
 
             if message.type.success and not self._authorized:
                 logger.info("Authorized Successfully")
-                self.loop.create_task(self.get_event("on_winerp_ready")())
+                self._dispatch_event('winerp_ready')
                 self._authorized = True
                 self._on_hold = False
 
@@ -346,12 +346,12 @@ class Client:
                     return
                 logger.info("Fulfilling request @ route: %s" % message.route)
                 self.loop.create_task(self._fulfill_request(message))
-                self.loop.create_task(self.get_event("on_winerp_request")())
+                self._dispatch_event('winerp_request')
             
             elif message.type.response:
                 logger.info("Received a response from server @ uuid: %s" % message.uuid)
                 self.loop.create_task(self._dispatch(message))
-                self.loop.create_task(self.get_event("on_winerp_response")())
+                self._dispatch_event('winerp_response')
 
             elif message.type.error:
                 if message.data == "Already authorized.":
@@ -359,7 +359,7 @@ class Client:
                     logger.warn("Another client is already connected. Requests will be enabled when the other is disconnected.")
                 else:
                     logger.debug("Failed to fulfill request: %s" % message.data)
-                    self.loop.create_task(self.get_event("on_winerp_error")(message.data))
+                    self._dispatch_event('winerp_error', message.data)
 
                 if message.uuid is not None:
                     self.loop.create_task(self._dispatch(message))
@@ -367,7 +367,7 @@ class Client:
             elif message.type.information:
                 if message.data:
                     logger.info("Received an information bit from client: %s" % message.id)
-                    self.loop.create_task(self.get_event("on_winerp_information")(message.data, message.id))
+                    self._dispatch_event('winerp_information', message.data, message.id)
                 
 
     
@@ -385,7 +385,7 @@ class Client:
             json.dumps(payload.data) #Ensuring data is serializable
         except Exception as error:
             logger.exception(error)
-            self.loop.create_task(self.get_event("on_winerp_error")(error))
+            self._dispatch_event('winerp_error', error)
             etype = type(error)
             trace = error.__traceback__
             lines = traceback.format_exception(etype, error, trace)
@@ -457,5 +457,40 @@ class Client:
         if not asyncio.iscoroutinefunction(func):
             raise TypeError("Event function must be a coro.")
 
-        self.events[func.__name__] = func
+        setattr(self, func.__name__, func)
+        logger.debug(('%s has successfully been registered as an event', func.__name__))
         return func
+
+    def _dispatch_event(self, event_name: str, *args, **kwargs):
+        try:
+            coro = getattr(self, f'on_{event_name}')
+        except AttributeError:
+            pass
+        else:
+            self._schedule_event(coro, f'on_{event_name}', *args, **kwargs)
+
+    
+    def _schedule_event(
+        self,
+        coro: Callable[..., Coroutine[Any, Any, Any]],
+        event_name: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> asyncio.Task:
+        wrapped = self._run_event(coro, event_name, *args, **kwargs)
+        # Schedules the task
+        return asyncio.create_task(wrapped, name=f'winerp: {event_name}')
+    
+
+    async def _run_event(
+        self,
+        coro: Callable[..., Coroutine[Any, Any, Any]],
+        event_name: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        try:
+            await coro(*args, **kwargs)
+        except Exception:
+            # TODO
+            traceback.print_exc()
