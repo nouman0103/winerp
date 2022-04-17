@@ -31,6 +31,52 @@ Working
 This library uses a central server for communication between multiple processes.
 You can connect a large number of clients for sharing data, and data can be shared between any connected client.
 
+1) Import the library:
+
+   .. code-block:: python3
+      
+      import winerp
+
+2) Initialize winerp client:
+
+.. code-block:: python3
+   
+   ipc_client = winerp.Client(local_name = "my-cool-app", port=8080)
+
+3) Start the client:
+
+.. code-block:: python3
+   
+   await ipc_client.start()
+   # or asyncio.create_task(ipc_client.start())
+   # This can be different for different libraries
+   # If you are using newer version of discord.py
+   # refer to examples/discordpy_usage.py for usage
+   # in our github repository: https://github.com/BlackThunder01001/winerp
+
+- Registering routes:
+
+.. code-block:: python3
+
+   @ipc_client.route
+   async def route_name(name):
+      return f"Hello {name}"
+
+
+- Requesting data from another client:
+
+.. code-block:: python3
+
+   user_name = await ipc_client.request(route="fetch_user_name", source="another-cool-bot", user_id = 123)
+
+- Sending *information* type data to other clients:
+
+.. code-block:: python3
+
+   data = [1, 2, 3, 4]
+   await ipc_client.inform(data, destinations=["another-cool-bot"])
+
+
 Example Usage
 ~~~~~~~~~~~~~~
 
@@ -54,7 +100,7 @@ Client 1 (`some-random-bot`):
 
    bot = Bot(command_prefix="!", intents=discord.Intents.all())
 
-   bot.ipc = winerp.Client(local_name = "some-random-bot", loop = bot.loop, port=8080)
+   bot.ipc = winerp.Client(local_name = "some-random-bot", port=8080)
 
    @bot.command()
    async def request(ctx):
@@ -76,6 +122,10 @@ Client 1 (`some-random-bot`):
    async def on_winerp_ready():
       print("Winerp Client is ready for connections")
 
+   # This can be different for different libraries
+   # If you are using newer version of discord.py
+   # refer to examples/discordpy_usage.py for usage
+   # in our github repository: https://github.com/BlackThunder01001/winerp
    bot.loop.create_task(bot.ipc.start())
    bot.run("TOKEN")
 
@@ -90,7 +140,7 @@ Client 2 (`another-bot`)
 
    bot = Bot(command_prefix="?", intents=discord.Intents.all())
 
-   bot.ipc = winerp.Client(local_name = "another-bot", loop = bot.loop, port=8080)
+   bot.ipc = winerp.Client(local_name = "another-bot", port=8080)
 
    @bot.command()
    async def format(ctx):
@@ -108,7 +158,10 @@ Client 2 (`another-bot`)
    async def get_some_data():
       return "You are very cool"
 
-
+   # This can be different for different libraries
+   # If you are using newer version of discord.py
+   # refer to examples/discordpy_usage.py for usage
+   # in our github repository: https://github.com/BlackThunder01001/winerp
    bot.loop.create_task(bot.ipc.start())
    bot.run("TOKEN")
 
@@ -138,5 +191,5 @@ Refer to this to know more about the API.
 Help and Support
 ~~~~~~~~~~~~~~~~
 
-   - Join our `Discord <https://discord.gg/SpMGPkjwyT> `_ server for support.
-   - Report bugs and feature requests at `GitHub <https://www.github.com/BlackThunder01001/winerp> `_
+   - Join our `Discord <https://discord.gg/SpMGPkjwyT>` server for support.
+   - Report bugs and feature requests at `GitHub <https://www.github.com/BlackThunder01001/winerp>`
