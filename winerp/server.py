@@ -29,7 +29,6 @@ class Server:
         self.websocket.set_fn_new_client(self.__on_client_connect)
         self.websocket.set_fn_message_received(self.__on_message)
         self.websocket.set_fn_client_left(self.__on_client_disconnect)
-        self.console_output = True
         self.active_clients = {}
         self.pending_verification = {}
         self.on_hold_connections = {}
