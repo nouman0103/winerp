@@ -20,6 +20,40 @@ pip install git+https://www.github.com/BlackThunder01001/winerp
 ### Working:
 This library uses a central server for communication between multiple clients. You can connect a large number of clients for sharing data, and data can be shared between any connected client.
 
+1) Import the library:
+```py
+import winerp
+```
+
+2) Initialize winerp client:
+```py
+ipc_client = winerp.Client(local_name = "my-cool-app", port=8080)
+```
+
+3) Start the client:
+```py
+await ipc_client.start()
+# or
+asyncio.create_task(ipc_client.start())
+```
+
+- Registering routes:
+```py
+@ipc_client.route
+async def route_name(name):
+    return f"Hello {name}"
+```
+
+- Requesting data from another client:
+```py
+user_name = await ipc_client.request(route="fetch_user_name", source="another-cool-bot", user_id = 123)
+```
+
+- Sending *information* type data to other clients:
+```py
+data = [1, 2, 3, 4]
+await ipc_client.inform(data, destinations=["another-cool-bot"])
+```
 
 ## Example Usage:
 
