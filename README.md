@@ -66,7 +66,7 @@ import discord
 from discord.ext.commands import Bot
 bot = Bot(command_prefix="!", intents=discord.Intents.all())
 
-bot.ipc = winerp.Client(local_name = "some-random-bot", loop = bot.loop, port=8080)
+bot.ipc = winerp.Client(local_name = "some-random-bot", port=8080)
 
 @bot.command()
 async def request(ctx):
@@ -95,7 +95,7 @@ import discord
 from discord.ext.commands import Bot
 bot = Bot(command_prefix="?", intents=discord.Intents.all())
 
-bot.ipc = winerp.Client(local_name = "another-bot", loop = bot.loop, port=8080)
+bot.ipc = winerp.Client(local_name = "another-bot", port=8080)
 
 @bot.command()
 async def format(ctx):
