@@ -13,6 +13,7 @@ from typing import (
     Callable,
     Coroutine,
     TypeVar,
+    Union,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,6 @@ class Client:
     def __init__(
         self,
         local_name: str,
-        loop: asyncio.AbstractEventLoop = None,
         port: int = 13254
     ):
         self.uri = f"ws://localhost:{port}"        
@@ -43,14 +43,6 @@ class Client:
         self.websocket = None
         self.routes = {}
         self.listeners = {}
-        if loop is None:
-            try:
-                self.loop = asyncio.get_running_loop()
-            except:
-                self.loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(self.loop)
-        else:
-            self.loop = loop
         self._authorized = False
         self._on_hold = False
         self.events = [
@@ -83,13 +75,14 @@ class Client:
         '''
         return self._on_hold
 
-    async def send_message(self, data):
-        if not isinstance(data, dict):
-            data = data.to_dict()
+    async def send_message(self, data: Union[Any, WsMessage]):
+        if not isinstance(data, WsMessage):
+            data = data.__dict__
+
         await self.websocket.send(json.dumps(data))
     
     def __send_message(self, data):
-        self.loop.create_task(self.send_message(data))
+        asyncio.create_task(self.send_message(data))
     
     async def start(self) -> None:
         '''|coro|
@@ -181,7 +174,7 @@ class Client:
             uuid = _uuid
         )
         await self.send_message(payload)
-        resp = await self.__get_response(_uuid, self.loop, timeout=timeout)
+        resp = await self.__get_response(_uuid, asyncio.get_event_loop(), timeout=timeout)
         return resp.get("success", False)
 
     def __get_response(
@@ -255,7 +248,7 @@ class Client:
             )
 
             await self.send_message(payload)
-            recv = await self.__get_response(_uuid, self.loop, timeout=timeout)
+            recv = await self.__get_response(_uuid, asyncio.get_event_loop(), timeout=timeout)
             return recv
         
         else:
@@ -329,7 +322,7 @@ class Client:
 
             elif message.type.ping:
                 logger.debug("Received a ping from server")
-                self.loop.create_task(self._dispatch(message))
+                asyncio.create_task(self._dispatch(message))
 
             elif message.type.request:
                 if message.route not in self.routes:
@@ -345,12 +338,12 @@ class Client:
                     self.__send_message(payload)
                     return
                 logger.info("Fulfilling request @ route: %s" % message.route)
-                self.loop.create_task(self._fulfill_request(message))
+                asyncio.create_task(self._fulfill_request(message))
                 self._dispatch_event('winerp_request')
             
             elif message.type.response:
                 logger.info("Received a response from server @ uuid: %s" % message.uuid)
-                self.loop.create_task(self._dispatch(message))
+                asyncio.create_task(self._dispatch(message))
                 self._dispatch_event('winerp_response')
 
             elif message.type.error:
@@ -362,7 +355,7 @@ class Client:
                     self._dispatch_event('winerp_error', message.data)
 
                 if message.uuid is not None:
-                    self.loop.create_task(self._dispatch(message))
+                    asyncio.create_task(self._dispatch(message))
 
             elif message.type.information:
                 if message.data:

@@ -10,6 +10,9 @@ class WsMessage:
     def __repr__(self) -> str:
         return f'<winerp.WsMessage uuid={self.uuid} type={self.type.__repr__()}>'
     
+    def __dict__(self) -> dict:
+        return self.to_dict()
+    
     @property
     def type(self) -> PayloadTypes:
         '''
