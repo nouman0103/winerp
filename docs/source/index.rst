@@ -138,5 +138,5 @@ Refer to this to know more about the API.
 Help and Support
 ~~~~~~~~~~~~~~~~
 
-   - Join our [Discord](https://discord.gg/SpMGPkjwyT) server for support.
-   - Report bugs and feature requests at [GitHub](https://www.github.com/BlackThunder01001/winerp)
+   - Join our `Discord <https://discord.gg/SpMGPkjwyT> `_ server for support.
+   - Report bugs and feature requests at `GitHub <https://www.github.com/BlackThunder01001/winerp> `_
