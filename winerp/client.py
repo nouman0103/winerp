@@ -331,14 +331,14 @@ class Client:
 
         Waits until the client is ready to send or accept requests.        
         '''
-        await self.wait_for('winerp_ready')
+        await self.wait_for('winerp_ready', None)
 
     async def wait_until_disconnected(self):
         '''|coro|
         
         Waits until the client is disconnected.
         '''
-        await self.wait_for('winerp_disconnect')
+        await self.wait_for('winerp_disconnect', None)
 
     def wait_for(
         self,
