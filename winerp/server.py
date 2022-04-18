@@ -2,7 +2,7 @@ from websocket_server import WebsocketServer
 from .lib.message import WsMessage
 from .lib.payload import Payloads, MessagePayload
 from .lib.errors import *
-import json
+import orjson
 
 import logging
 logger = logging.getLogger(__name__)
@@ -40,11 +40,11 @@ class Server:
         '''
         return len(self.active_clients)
 
-    def __on_client_connect(self, client, server):
+    def __on_client_connect(self, client, _):
         logger.info("Client connected with id %s" % client['address'][1])
         self.pending_verification[client["address"][1]] = client
 
-    def __on_client_disconnect(self, client, server):
+    def __on_client_disconnect(self, client, _):
         logger.info("Client disconnected with id %s" % client['address'][1])
         for cid, each_client in self.active_clients.items():
             if each_client["id"] == client["address"][1]:
@@ -75,7 +75,7 @@ class Server:
             message = message.to_dict()
         self.websocket.send_message(
             client,
-            json.dumps(message)
+            orjson.dumps(message)
         )
 
     def __send_error(self, client, payload):
@@ -84,11 +84,11 @@ class Server:
 
         self.websocket.send_message(
             client,
-            json.dumps(payload)
+            orjson.dumps(payload)
         )
 
-    def __on_message(self, client, server, msg):
-        msg = WsMessage(json.loads(msg))
+    def __on_message(self, client, _, msg):
+        msg = WsMessage(orjson.loads(msg))
         payload = MessagePayload().from_message(msg)
         if msg.type.verification:
             if msg.id in self.active_clients:
