@@ -1,7 +1,7 @@
 import asyncio
 from types import FunctionType
 import websockets
-import json
+import orjson
 import logging
 from .lib.message import WsMessage
 from .lib.payload import Payloads, MessagePayload
@@ -15,7 +15,6 @@ from typing import (
     TypeVar,
     Union,
     Dict,
-    Tuple,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,10 +45,11 @@ class Client:
         self.local_name: str = local_name
         self.reconnect: bool = reconnect
         self.reconnect_threshold: int = 60
+        self.max_data_size: float = 2 #MiB
         self.websocket = None
         self.__routes = {}
         self.listeners = {}
-        self.event_listeners: Dict[str, Tuple[asyncio.Future, Callable]] = {}
+        self.event_listeners: Dict[str, asyncio.Future] = {}
         self._authorized: bool = False
         self._on_hold = False
         self.events = [
@@ -80,7 +80,7 @@ class Client:
         if not isinstance(data, WsMessage):
             data = data.__dict__
 
-        await self.websocket.send(json.dumps(data))
+        await self.websocket.send(orjson.dumps(data).decode("utf-8"))
     
     def __send_message(self, data):
         asyncio.create_task(self.send_message(data))
@@ -97,7 +97,9 @@ class Client:
     async def __connect(self) -> None:
         if self.websocket is None or self.websocket.closed:
             logger.info("Connecting to Websocket")
-            self.websocket = await websockets.connect(self.uri, close_timeout=0, ping_interval=None)
+            self.websocket = await websockets.connect(
+                self.uri, close_timeout=0, ping_interval=None, max_size=int(self.max_data_size*1048576)
+            )
             self._authorized = False
             self._dispatch_event('winerp_connect')
             logger.info("Connected to Websocket")
@@ -202,7 +204,7 @@ class Client:
         timeout: int = 60
     ):
         future = loop.create_future()
-        self.listeners[_uuid] = (None, future)
+        self.listeners[_uuid] = future
         return asyncio.wait_for(future, timeout, loop=loop)
 
     async def request(
@@ -329,20 +331,19 @@ class Client:
 
         Waits until the client is ready to send or accept requests.        
         '''
-        await self.wait_for('winerp_ready', None)
+        await self.wait_for('winerp_ready')
 
     async def wait_until_disconnected(self):
         '''|coro|
         
         Waits until the client is disconnected.
         '''
-        await self.wait_for('winerp_disconnect', None)
+        await self.wait_for('winerp_disconnect')
 
     def wait_for(
         self,
         event: str,
         timeout: int = 60,
-        check: Callable = None,
     ):
         '''|coro|
 
@@ -362,10 +363,7 @@ class Client:
             The event to wait for.
         timeout: Optional[:class:`int`]
             Time to wait before raising :class:`~asyncio.TimeoutError`. Defaults to 60.
-        check: Optional[:class:`Callable`]
-            A function to check if the event meets the requirements.
-            If it returns True, the event is returned.
-        
+
         Raises
         -------
             asyncio.TimeoutError
@@ -377,12 +375,6 @@ class Client:
                 The payload for the event that meets the requirements.
         '''
         future = asyncio.get_event_loop().create_future()
-        if check is None:
-
-            def _check(*args):
-                return True
-
-            check = _check
 
         ev = event.lower()
         try:
@@ -391,7 +383,7 @@ class Client:
             listeners = []
             self.event_listeners[ev] = listeners
 
-        listeners.append((future, check))
+        listeners.append(future)
         return asyncio.wait_for(future, timeout)
 
 
@@ -399,7 +391,7 @@ class Client:
         logger.info("Listening to messages")
         while True:
             try:
-                message = WsMessage(json.loads(await self.websocket.recv()))
+                message = WsMessage(orjson.loads(await self.websocket.recv()))
             except websockets.exceptions.ConnectionClosedError:
                 self._dispatch_event('winerp_disconnect')
                 if self.reconnect:
@@ -465,11 +457,10 @@ class Client:
         payload = MessagePayload().from_message(message)
         payload.type = Payloads.response
         payload.id = self.local_name
-        payload.data = {}
+
 
         try:
             payload.data = await func(**data)
-            json.dumps(payload.data) #Ensuring data is serializable
         except Exception as error:
             logger.exception(error)
             self._dispatch_event('winerp_error', error)
@@ -482,41 +473,37 @@ class Client:
             payload.data = str(error)
             payload.traceback = traceback_text
         finally:
-            self.__send_message(payload)
+            try:
+                await self.send_message(payload)
+            except TypeError as error:
+                logger.exception("Failed to convert data to json")
+                self._dispatch_event('winerp_error', error)
+                payload.type = Payloads.error
+                payload.data = str(error)
+                payload.traceback = ''.join(
+                    traceback.format_exception(
+                        TypeError,
+                        error,
+                        error.__traceback__
+                    )
+                )
+                self.__send_message(payload)
     
     async def _dispatch(self, msg: WsMessage):
         data = msg.data
-        logger.debug('Dispatch -> %r', data)
         _uuid = msg.uuid
         if _uuid is None:
             raise MissingUUIDError('UUID is missing.')
-        
-        found = False
-        for key, val in self.listeners.items():
-            if key == _uuid:
-                found = True
-                check = val[0]
-                future: asyncio.Future = val[1]
-
-                def _check(*args):
-                    return True
-
-                if check is None:
-                    check = _check
-                
-                if not msg.type.error:
-                    if check(data):
-                        future.set_result(data)
-                    else:
-                        future.set_exception(
-                            CheckFailureError(f"Check failed for UUID {_uuid}")
-                        )
-                else:
-                    future.set_exception(
-                        ClientRuntimeError(msg.data)
-                    )
-        if not found:
+        if _uuid not in self.listeners:
             raise UUIDNotFoundError(f"UUID {_uuid} not found in listeners.")
+        
+        future: asyncio.Future = self.listeners[_uuid]
+        if not msg.type.error:
+            future.set_result(data)
+        else:
+            future.set_exception(
+                ClientRuntimeError(msg.data)
+            )
 
     def event(self, func: Coro, /) -> Coro:
         '''
@@ -550,13 +537,12 @@ class Client:
 
     def _dispatch_event(self, event_name: str, *args, **kwargs):
         logger.debug('Event Dispatch -> %r', event_name)
-        
-        for ev, data in self.event_listeners.items():
-            if ev == event_name:
-                for fut, check in data:            
-                    if check(*args, **kwargs):
-                        fut.set_result(None)
-                        logger.debug('Event %r has been dispatched', event_name)
+        try:
+            for future in self.event_listeners[event_name]:
+                future.set_result(None)
+                logger.debug('Event %r has been dispatched', event_name)
+        except KeyError:
+            ...
 
         try:
             coro = getattr(self, f'on_{event_name}')
