@@ -32,19 +32,25 @@ class Client:
         This should be unique to all the clients.
     port: Optional[:class:`int`]
         The port on which the server is running. Defaults to 13254.
+    reconnect: Optional[:class:`bool`]
+        If set to True, the client will automatically try to reconnect to the winerp server
+        every 60 seconds (default). This option is set to True by default.
     """
     def __init__(
         self,
         local_name: str,
-        port: int = 13254
+        port: int = 13254,
+        reconnect: bool = True
     ):
-        self.uri = f"ws://localhost:{port}"        
-        self.local_name = local_name
+        self.uri: str = f"ws://localhost:{port}"        
+        self.local_name: str = local_name
+        self.reconnect: bool = reconnect
+        self.reconnect_threshold: int = 60
         self.websocket = None
         self.__routes = {}
         self.listeners = {}
         self.event_listeners: Dict[str, Tuple[asyncio.Future, Callable]] = {}
-        self._authorized = False
+        self._authorized: bool = False
         self._on_hold = False
         self.events = [
             "on_winerp_connect",
@@ -55,12 +61,6 @@ class Client:
             "on_winerp_information",
             "on_winerp_error"
         ]
-    
-    async def __empty_event(self, *args, **kwargs):
-        ...
-
-    def get_event(self, key):
-        return self.events.get(key) or self.__empty_event
     
     @property
     def authorized(self) -> bool:
@@ -85,6 +85,33 @@ class Client:
     def __send_message(self, data):
         asyncio.create_task(self.send_message(data))
     
+    async def __verify_client(self):
+        payload = MessagePayload(
+            type = Payloads.verification,
+            id = self.local_name,
+            uuid = str(uuid.uuid4())
+        )
+        await self.send_message(payload)
+        logger.info("Verification request sent")
+
+    async def __connect(self) -> None:
+        if self.websocket is None or self.websocket.closed:
+            logger.info("Connecting to Websocket")
+            self.websocket = await websockets.connect(self.uri, close_timeout=0, ping_interval=None)
+            self._authorized = False
+            self._dispatch_event('winerp_connect')
+            logger.info("Connected to Websocket")
+
+    async def __reconnect_client(self) -> bool:
+        while True:
+            try:
+                await self.__connect()
+                await self.__verify_client()
+                return True
+            except:
+                logger.debug(f"Failed to reconnect. Retrying in {self.reconnect_threshold}s")
+                await asyncio.sleep(self.reconnect_threshold)
+        
     async def start(self) -> None:
         '''|coro|
 
@@ -100,19 +127,9 @@ class Client:
             :class:`None`
         '''
         if self.websocket is None or self.websocket.closed:
-            logger.info("Connecting to Websocket")
-            self.websocket = await websockets.connect(self.uri, close_timeout=0, ping_interval=None)
-            self._dispatch_event('winerp_connect')
-            logger.info("Connected to Websocket")
-            payload = MessagePayload(
-                type = Payloads.verification,
-                id = self.local_name,
-                uuid = str(uuid.uuid4())
-            )
-            await self.send_message(payload)
-            logger.info("Verification request sent")
+            await self.__connect()
+            await self.__verify_client()
             asyncio.create_task(self.__on_message())
-            logger.info("Listening to messages")
         else:
             raise ConnectionError("Websocket is already connected!")
 
@@ -379,12 +396,17 @@ class Client:
 
 
     async def __on_message(self):
+        logger.info("Listening to messages")
         while True:
             try:
                 message = WsMessage(json.loads(await self.websocket.recv()))
             except websockets.exceptions.ConnectionClosedError:
                 self._dispatch_event('winerp_disconnect')
-                break
+                if self.reconnect:
+                    if not await self.__reconnect_client():
+                        break
+                else:
+                    break
 
             if message.type.success and not self._authorized:
                 logger.info("Authorized Successfully")
