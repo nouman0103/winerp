@@ -170,7 +170,10 @@ class Server:
         if msg.type.response or msg.type.error:
             logger.debug("Received Response Message from client %s" % client['address'][1])
             if msg.destination not in self.active_clients:
-                self.__send_error(client, "Destination could not be found!", uuid=msg.uuid)
+                payload.type = Payloads.error
+                payload.data = "The data requester is no longer connected"
+                payload.traceback = "The data requester is no longer connected"
+                self.__send_error(client, payload)
 
             payload.type = Payloads.response if msg.type.response else Payloads.error
 
