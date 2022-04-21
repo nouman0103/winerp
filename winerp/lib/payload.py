@@ -1,3 +1,7 @@
+import asyncio
+from uuid import uuid4
+
+
 class Payloads:
     '''
     Specifies all the payloads available in the system.
@@ -10,6 +14,7 @@ class Payloads:
     error = 4
     ping = 5
     information = 6
+    function_call = 7
 
 class PayloadTypes:
     '''
@@ -76,6 +81,14 @@ class PayloadTypes:
         '''
         return self._type == Payloads.information
 
+    @property
+    def function_call(self) -> bool:
+        '''
+        :class:`bool`: Returns ``True`` if the message is an information message.
+        '''
+        return self._type == Payloads.function_call
+
+
 
 class MessagePayload:
     '''
@@ -89,6 +102,7 @@ class MessagePayload:
         self.data = kwargs.pop('data', {})
         self.uuid = kwargs.pop('uuid', None)
         self.destination = kwargs.pop('destination', None)
+        self.pseudo_object = kwargs.pop('pseudo_object', None)
     
 
     def from_message(self, msg):
@@ -111,6 +125,7 @@ class MessagePayload:
         self.traceback = msg.traceback
         self.uuid = msg.uuid
         self.destination = msg.destination
+        self.pseudo_object = msg.pseudo_object
         return self
 
     def to_dict(self) -> dict:
@@ -128,6 +143,75 @@ class MessagePayload:
             'data': self.data,
             'traceback': self.traceback,
             'uuid': self.uuid,
-            'destination': self.destination
+            'destination': self.destination,
+            'pseudo_object': self.pseudo_object
         }
 
+
+class responseObject:
+    def __init__(self, ipc_client, source, data):
+        self.__ipc = ipc_client
+        self.__name__ = data["__name__"]
+        self.__uuid__ = data["__uuid__"]
+        self.__source = source
+        for each_attribute, attribute_value in data["__attr__"].items():
+            self.__setattr__(each_attribute, attribute_value)
+
+        for each_function, is_it_coro in data["__func__"].items():
+            async def __async_fakeFunc(*args, **kwargs):
+                return await self.__function_call(each_function, is_it_coro, *args, **kwargs)
+
+            self.__setattr__(each_function, __async_fakeFunc)
+
+    
+
+    async def __function_call(self, function_name, is_it_coro, *args, **kwargs):
+        return await self.__ipc.call_function(self.__source, self.__uuid__, function_name, *args, **kwargs)
+
+
+
+class winerpObject:
+    def __init__(self, object, required_functions = [], required_iterables = [], object_expiry=30):
+        self.object = object
+        self.required_functions = required_functions
+        self.required_iterables = required_iterables,
+        self.object_expiry = object_expiry
+        self.uuid = str(uuid4())
+
+    def serialize_attributes(self):
+        self.__serialized = {}
+        self.functions = {}
+        self.__serialized_functions = {}
+        for attribute in self.object.__dir__():
+            if attribute[0] == "_":
+                continue
+            
+            try:
+                attribute_value = getattr(self.object, attribute)
+            except:
+                continue
+            
+            if isinstance(attribute_value, (int, float, str, bool, type(None), dict)):
+                self.__serialized[attribute] = attribute_value
+            elif callable(attribute_value):
+                if attribute in self.required_functions:
+                    self.functions[attribute] = attribute_value
+                    self.__serialized_functions[attribute] = asyncio.iscoroutinefunction(attribute_value)
+            elif isinstance(attribute_value, (list, tuple)):
+                ...
+            else:
+                try:
+                    self.__serialized[attribute] = attribute_value.__str__()
+                except:
+                    ...
+                
+        return self.__serialized, self.functions
+
+    def serialize(self):
+        raw_object = self.serialize_attributes()
+        return {
+            "__name__": self.object.__class__.__name__,
+            "__attr__": raw_object[0],
+            "__func__": self.__serialized_functions,
+            "__uuid__": self.uuid
+        }
