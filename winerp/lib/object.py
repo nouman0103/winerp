@@ -1,6 +1,6 @@
 import time
 import asyncio
-import logging
+#import logging
 from typing import (
     Any,
     Callable,
@@ -10,7 +10,7 @@ from typing import (
 )
 import uuid
 
-log = logging.getLogger(__name__)
+#log = logging.getLogger(__name__)
 
 class AnyObject:
     '''
@@ -86,7 +86,7 @@ class WinerpObject:
                         attr = asyncio.coroutine(attr)
                     self._functions.append([i, _func_uuid])
                     client_routes[_func_uuid] = attr
-                    log.debug('adding to routes: %r', client_routes)
+                    #log.debug('adding to routes: %r', client_routes)
                 continue
 
             elif isinstance(attr, (list, tuple)):
@@ -183,10 +183,10 @@ class WinerpObject:
         if isinstance(object, dict):
             return object, self._functions
         _dir = object.__dir__()
-        log.debug([x for x in _dir if not x.startswith('_')])
+        #log.debug([x for x in _dir if not x.startswith('_')])
         t1 = time.time()
         self.json = await self._to_json(object, client)
-        log.info('Time taken: %r', time.time() - t1)
+        #log.info('Time taken: %r', time.time() - t1)
         return (self.json, self._functions)
     
     async def to_object(self, message: object, request: Callable) -> object:
