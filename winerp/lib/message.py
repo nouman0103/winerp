@@ -83,6 +83,21 @@ class WsMessage:
         '''
         self._message["traceback"] = traceback
 
+    @property
+    def pseudo_object(self) -> bool:
+        '''
+        :class:`str`: Returns the error associated with the message.
+        '''
+        return self._message.get("pseudo_object")
+    
+
+    @pseudo_object.setter
+    def pseudo_object(self, pseudo_object: bool):
+        '''
+        Sets the error associated with the message.
+        '''
+        self._message["pseudo_object"] = pseudo_object
+
     def to_dict(self) -> dict:
         '''
         :class:`dict`: Returns the message as a `dict` type.
@@ -95,5 +110,6 @@ class WsMessage:
             'uuid': self.uuid,
             'data': self.data,
             'error': self.error,
-            'traceback': self.traceback
+            'traceback': self.traceback,
+            'pseudo_object': self.pseudo_object
         }
