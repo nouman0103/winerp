@@ -89,6 +89,8 @@ class MessagePayload:
         self.data = kwargs.pop('data', {})
         self.uuid = kwargs.pop('uuid', None)
         self.destination = kwargs.pop('destination', None)
+        self.complex_object = kwargs.pop('complex_object', False)
+        self.complex_object_functions = kwargs.pop('complex_object_functions', [])
     
 
     def from_message(self, msg):
@@ -111,6 +113,8 @@ class MessagePayload:
         self.traceback = msg.traceback
         self.uuid = msg.uuid
         self.destination = msg.destination
+        self.complex_object = msg.complex_object
+        self.complex_object_functions = msg.complex_object_functions
         return self
 
     def to_dict(self) -> dict:
@@ -128,6 +132,7 @@ class MessagePayload:
             'data': self.data,
             'traceback': self.traceback,
             'uuid': self.uuid,
-            'destination': self.destination
+            'destination': self.destination,
+            'complex_object': self.complex_object,
+            'complex_object_functions': self.complex_object_functions
         }
-

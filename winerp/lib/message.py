@@ -83,6 +83,21 @@ class WsMessage:
         '''
         self._message["traceback"] = traceback
 
+    @property
+    def complex_object(self) -> bool:
+        '''
+        :class:`bool`: Returns ``True`` if the message is a complex object.
+        '''
+        return self._message.get("complex_object", False)
+    
+    @property
+    def complex_object_functions(self) -> list:
+        '''
+        :class:`list`: Returns the functions associated
+        with the complex object.
+        '''
+        return self._message.get("complex_object_functions", [])
+
     def to_dict(self) -> dict:
         '''
         :class:`dict`: Returns the message as a `dict` type.
@@ -95,5 +110,7 @@ class WsMessage:
             'uuid': self.uuid,
             'data': self.data,
             'error': self.error,
-            'traceback': self.traceback
+            'traceback': self.traceback,
+            'complex_object': self.complex_object,
+            'complex_object_functions': self.complex_object_functions,
         }

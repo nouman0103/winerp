@@ -6,6 +6,7 @@ import logging
 from .lib.message import WsMessage
 from .lib.payload import Payloads, MessagePayload
 from .lib.errors import *
+from .lib.object import WinerpObject
 import uuid
 import traceback
 from typing import (
@@ -45,7 +46,7 @@ class Client:
         self.local_name: str = local_name
         self.reconnect: bool = reconnect
         self.reconnect_threshold: int = 60
-        self.max_data_size: float = 2 #MiB
+        self.max_data_size: float = 32 #MiB
         self.websocket = None
         self.__routes = {}
         self.listeners = {}
@@ -331,14 +332,14 @@ class Client:
 
         Waits until the client is ready to send or accept requests.        
         '''
-        await self.wait_for('winerp_ready')
+        await self.wait_for('winerp_ready', None)
 
     async def wait_until_disconnected(self):
         '''|coro|
         
         Waits until the client is disconnected.
         '''
-        await self.wait_for('winerp_disconnect')
+        await self.wait_for('winerp_disconnect', None)
 
     def wait_for(
         self,
@@ -391,7 +392,8 @@ class Client:
         logger.info("Listening to messages")
         while True:
             try:
-                message = WsMessage(orjson.loads(await self.websocket.recv()))
+                _msg = await self.websocket.recv()
+                message = WsMessage(orjson.loads(_msg))
             except websockets.exceptions.ConnectionClosedError:
                 self._dispatch_event('winerp_disconnect')
                 if self.reconnect:
@@ -460,7 +462,21 @@ class Client:
 
 
         try:
-            payload.data = await func(**data)
+            data = await func(**data)
+
+            try:
+                orjson.dumps(data) # Ensuring data is serializable
+                payload.data = data
+            except:
+                if isinstance(data, WinerpObject):
+                    data, functions = await data.to_dict(self.__routes)
+                else:
+                    data, functions = await WinerpObject(data, recursion_level=0).to_dict(self.__routes)
+                
+                payload.complex_object = True
+                payload.complex_object_functions = functions
+                payload.data = data
+            
         except Exception as error:
             logger.exception(error)
             self._dispatch_event('winerp_error', error)
@@ -499,6 +515,11 @@ class Client:
         
         future: asyncio.Future = self.listeners[_uuid]
         if not msg.type.error:
+            if msg.complex_object:
+                data = WinerpObject(data)
+                data._functions = msg.complex_object_functions
+                data = await data.to_object(msg, self.request)
+
             future.set_result(data)
         else:
             future.set_exception(
@@ -539,7 +560,7 @@ class Client:
         logger.debug('Event Dispatch -> %r', event_name)
         try:
             for future in self.event_listeners[event_name]:
-                future.set_result(None)
+                future.set_result(event_name)
                 logger.debug('Event %r has been dispatched', event_name)
         except KeyError:
             ...
