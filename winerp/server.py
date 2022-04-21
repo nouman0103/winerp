@@ -167,7 +167,7 @@ class Server:
                 )
                 logger.debug("Request Message Forwarded to %s" % self.active_clients[msg.destination]["client"]['address'][1])
 
-        if msg.type.response or msg.type.error:
+        if msg.type.response or msg.type.error or msg.type.function_call:
             logger.debug("Received Response Message from client %s" % client['address'][1])
             if msg.destination not in self.active_clients:
                 payload.type = Payloads.error
@@ -175,7 +175,8 @@ class Server:
                 payload.traceback = "The data requester is no longer connected"
                 self.__send_error(client, payload)
 
-            payload.type = Payloads.response if msg.type.response else Payloads.error
+            payload.type = Payloads.response if msg.type.response else (
+                Payloads.function_call if msg.type.function_call else Payloads.error)
 
             self.__send_message(
                 self.active_clients[msg.destination]["client"],
