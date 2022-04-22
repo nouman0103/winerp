@@ -1,7 +1,6 @@
 import datetime
 import time
 import asyncio
-import logging
 from typing import (
     Any,
     Callable,
@@ -10,8 +9,6 @@ from typing import (
     Tuple,
 )
 import uuid
-
-log = logging.getLogger(__name__)
 
 class AnyObject:
     '''
@@ -102,7 +99,6 @@ class WinerpObject:
                         attr = asyncio.coroutine(attr)
                     self._functions.append([i, _func_uuid])
                     client_routes[_func_uuid] = attr
-                    log.debug('adding to routes: %r', client_routes)
                 continue
 
             elif isinstance(attr, (list, tuple)):
@@ -202,12 +198,8 @@ class WinerpObject:
         object = self.object
         if isinstance(object, dict):
             return object, self._functions
-        _dir = object.__dir__()
-        log.debug([x for x in _dir if not x.startswith('_')])
-        t1 = time.time()
         self.json = await self._to_json(object, client_routes)
         self.json['__expiry__'] = self.expiry_time
-        log.info('Time taken: %r', time.time() - t1)
         asyncio.create_task(
             remove_routes(
                 client_routes,
