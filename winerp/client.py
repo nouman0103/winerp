@@ -465,6 +465,8 @@ class Client:
             data = await func(**data)
 
             try:
+                if isinstance(data, WinerpObject):
+                    raise TypeError
                 orjson.dumps(data) # Ensuring data is serializable
                 payload.data = data
             except:

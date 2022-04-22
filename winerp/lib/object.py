@@ -9,6 +9,7 @@ from typing import (
     Tuple,
 )
 import uuid
+import threading
 
 class AnyObject:
     '''
@@ -16,6 +17,27 @@ class AnyObject:
     '''
     def __init__(self) -> None:
         pass
+
+class ReturningThread(threading.Thread):
+    def __init__(
+        self,
+        group=None,
+        target=None,
+        name=None,
+        args=(),
+        kwargs={},
+        Verbose=None
+    ):
+        threading.Thread.__init__(self, group, target, name, args, kwargs)
+        self._return = None
+    
+    def run(self):
+        if self._target is not None:
+            self._return = self._target(*self._args, **self._kwargs)
+
+    def join(self, *args):
+        threading.Thread.join(self, *args)
+        return self._return
 
 async def remove_routes(client_routes: list, routes: list, after: int):
     await asyncio.sleep(after)
@@ -64,6 +86,7 @@ class WinerpObject:
         self.json = {}
         self.object = object
         self.recursion_level = recursion_level
+        self._rec = recursion_level
         self.handle_functions = handle_functions
         self.functions_list = functions_list
         self.handle_iterables = handle_iterables
@@ -73,16 +96,58 @@ class WinerpObject:
         self.expiry_time = time.time() + delete_after
         self._functions = []
     
-    async def _to_json(
+    def _to_json(
         self,
         object: object,
         client_routes: Dict[str, Callable],
+        recursion_level: int,
     ):
         if isinstance(object, (str, int, bool)):
             return object
 
         _json = {}
-        _dir = object.__dir__()
+        if recursion_level > 0:
+            _thread = ReturningThread(
+                target=self._unpack_obj,
+                args=(object, client_routes, _json, recursion_level),
+                name=f'[{3-recursion_level}] _to_json'
+            )
+            _thread.start()
+            _thread.join()
+            return _json
+
+        self._unpack_obj(object, client_routes, _json, recursion_level)
+        return _json
+    
+    def _unpack_list(
+        self,
+        _list: List[object],
+        client_routes: List[Dict[str, str]],
+        _json: list,
+        recursion_level: int,
+    ):
+        _threads = []
+        for i in _list:
+            _thread = ReturningThread(
+                target = self._to_json,
+                args = (i, client_routes, recursion_level,)
+            )
+            _threads.append(_thread)
+        
+        for _thread in _threads:
+            _thread.start()
+        
+        for _thread in _threads:
+            _json.append(_thread.join())
+    
+    def _unpack_obj(
+        self,
+        object: object,
+        client_routes: List[Dict[str, str]],
+        _json: dict,
+        recursion_level: int,
+    ):
+        _dir = dir(object)
         for i in _dir:
             if i.startswith('_'):
                 continue
@@ -102,19 +167,18 @@ class WinerpObject:
                 continue
 
             elif isinstance(attr, (list, tuple)):
-                if self.recursion_level > 0 and (
+                _attr = []
+                if recursion_level > 0 and (
                     self.handle_iterables and (self.iterables_list is None or i in self.iterables_list)
                 ):
-                    self.recursion_level -= 1
-                    _attr = []
+                    recursion_level -= 1
                     for obj in attr:
                         try:
                             _hack = obj.__dict__
                             _attr.append(_hack)
                         except:
-                            _attr.append(
-                                await asyncio.create_task(self._to_json(obj, client_routes))
-                            )
+                            self._unpack_list(attr, client_routes, _attr, recursion_level)
+                            break
 
             elif attr is None:
                 pass
@@ -126,31 +190,59 @@ class WinerpObject:
                 _attr = str(attr)
 
             _json[i] = _attr
-        return _json
     
-    async def _from_json(
+    def _from_json(
         self,
         json: dict,
         client_routes: List[Dict[str, str]],
         request: Callable,
         source: str,
+        _object: AnyObject,
         *,
         is_nested = True
     ):
-        obj = AnyObject()
+        
+        _thread = threading.Thread(
+            target=self._pack_obj,
+            args=(_object, json, client_routes, request, source,),
+        )
+        _thread.start()
+        _thread.join()
+        
+        if not is_nested:
+            for route in client_routes:
+                _attr_name, _uuid = route
+                _attr = lambda **kwargs: self._make_request(request, _uuid, source, **kwargs)
+                setattr(_object, _attr_name, _attr)
+
+            setattr(_object, '__json__', json)
+            setattr(_object, 'is_destroyed', lambda: json['__expiry__'] <= time.time())
+    
+    def _pack_obj(
+        self,
+        obj: AnyObject,
+        json: Dict[str, Any],
+        client_routes: List[Dict[str, str]],
+        request: str,
+        source: str
+    ):
         if isinstance(json, (str, int, bool)):
-            return json
+            return
 
         for i, attr in json.items():
             _attr = None
             
             if isinstance(attr, dict):
-                _attr = await self._from_json(attr, client_routes, request, source)
+                _thread = threading.Thread(
+                    target=self._from_json,
+                    args=(attr, client_routes, request, source, obj),
+                )
+                _thread.start()
+                _thread.join()
             
             elif isinstance(attr, list):
                 _attr = []
-                for at in attr:
-                    _attr.append(await self._from_json(at, client_routes, request, source))
+                self._pack_list(attr, client_routes, request, source, _attr)
             
             elif attr is None:
                 pass
@@ -159,15 +251,19 @@ class WinerpObject:
                 _attr = attr
             
             setattr(obj, i, _attr)
-        
-        if not is_nested:
-            for route in client_routes:
-                _attr_name, _uuid = route
-                _attr = lambda **kwargs: self._make_request(request, _uuid, source, **kwargs)
-                setattr(obj, _attr_name, _attr)
-            setattr(obj, '__json__', json)
-            setattr(obj, 'is_destroyed', lambda: json['__expiry__'] <= time.time())
-        return obj
+
+    def _pack_list(
+        self,
+        _list: List[object],
+        client_routes: List[Dict[str, str]],
+        request: str,
+        source: str,
+        _json: list,
+    ):
+        for i in _list:
+            obj = AnyObject()
+            self._from_json(i, client_routes, request, source, obj)
+            _json.append(obj)
     
     def _make_request(self, request, _uuid, _source, **kwargs):
         return request(_uuid, _source, 60, **kwargs)
@@ -198,7 +294,7 @@ class WinerpObject:
         object = self.object
         if isinstance(object, dict):
             return object, self._functions
-        self.json = await self._to_json(object, client_routes)
+        self.json = self._to_json(object, client_routes, self.recursion_level)
         self.json['__expiry__'] = self.expiry_time
         asyncio.create_task(
             remove_routes(
@@ -223,4 +319,6 @@ class WinerpObject:
         request: :class:`Callable`
             The request function to be used to make requests.
         '''
-        return await self._from_json(message.data, self._functions, request, message.id, is_nested=False)
+        obj = AnyObject()
+        self._from_json(message.data, self._functions, request, message.id, obj, is_nested=False)
+        return obj
