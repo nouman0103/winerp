@@ -1,3 +1,4 @@
+import datetime
 import time
 import asyncio
 import logging
@@ -18,6 +19,12 @@ class AnyObject:
     '''
     def __init__(self) -> None:
         pass
+
+async def remove_routes(client_routes: list, routes: list, after: int):
+    await asyncio.sleep(after)
+    for route in routes:
+        if route in client_routes:
+            client_routes.remove(route)
 
 class WinerpObject:
     '''
@@ -40,6 +47,10 @@ class WinerpObject:
         Whether to handle iterables or not. If ``True``, iterables will be serialized (this might take time for big iterables).
     iterables_list: Optional[:class:`list`]
         A list of iterables to be handled. If ``None``, all iterables will be handled.
+    delete_after: Optional[:class:`int`]
+        The time in seconds after which the routes attached to the object will be deleted.
+    keep_until: Optional[:class:`datetime.datetime`]
+        The time after which the routes attached to the object will be deleted.
     '''
     def __init__(
         self,
@@ -50,6 +61,8 @@ class WinerpObject:
         functions_list: List[str] = None,
         handle_iterables: bool = True,
         iterables_list: List[str] = None,
+        delete_after: int = 45,
+        keep_until: datetime.datetime = None,
     ):
         self.json = {}
         self.object = object
@@ -58,6 +71,9 @@ class WinerpObject:
         self.functions_list = functions_list
         self.handle_iterables = handle_iterables
         self.iterables_list = iterables_list
+        if keep_until is not None:
+            delete_after = (keep_until - datetime.datetime.now()).total_seconds()
+        self.expiry_time = time.time() + delete_after
         self._functions = []
     
     async def _to_json(
@@ -154,6 +170,7 @@ class WinerpObject:
                 _attr = lambda **kwargs: self._make_request(request, _uuid, source, **kwargs)
                 setattr(obj, _attr_name, _attr)
             setattr(obj, '__json__', json)
+            setattr(obj, 'is_destroyed', lambda: json['__expiry__'] <= time.time())
         return obj
     
     def _make_request(self, request, _uuid, _source, **kwargs):
@@ -162,7 +179,10 @@ class WinerpObject:
     def __dict__(self) -> dict:
         return self.to_dict()
     
-    async def to_dict(self, client) -> Tuple[Dict[str, Any], List[Dict[str, str]]]:
+    async def to_dict(
+        self,
+        client_routes: Dict[str, Callable],
+    ) -> Tuple[Dict[str, Any], List[Dict[str, str]]]:
         '''
         Returns a tuple of dictionary representation of the object and a list of functions to be handled.
         If the object supplied was already a dictionary, it will be returned as is.
@@ -185,8 +205,16 @@ class WinerpObject:
         _dir = object.__dir__()
         log.debug([x for x in _dir if not x.startswith('_')])
         t1 = time.time()
-        self.json = await self._to_json(object, client)
+        self.json = await self._to_json(object, client_routes)
+        self.json['__expiry__'] = self.expiry_time
         log.info('Time taken: %r', time.time() - t1)
+        asyncio.create_task(
+            remove_routes(
+                client_routes,
+                self._functions,
+                time.time() - self.expiry_time
+            )
+        )
         return (self.json, self._functions)
     
     async def to_object(self, message: object, request: Callable) -> object:
