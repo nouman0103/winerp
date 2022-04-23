@@ -40,8 +40,8 @@ asyncio.create_task(ipc_client.start())
 - Registering routes:
 ```py
 @ipc_client.route
-async def route_name(name):
-    return f"Hello {name}"
+async def route_name(source, user_name):
+    return f"Hello {user_name}"
 ```
 
 - Requesting data from another client:
@@ -76,7 +76,7 @@ async def request(ctx):
 
 
 @bot.ipc.route()
-async def get_formatted_data(user_id = None):
+async def get_formatted_data(source, user_id = None):
     return f"<@{user_id}>"
 
 
@@ -105,7 +105,7 @@ async def format(ctx):
 
 
 @bot.ipc.route()
-async def get_some_data():
+async def get_some_data(source):
     return "You are very cool"
 
 
