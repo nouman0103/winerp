@@ -460,7 +460,7 @@ class Client:
 
 
         try:
-            payload.data = await func(**data)
+            payload.data = await func(message.id, **data)
         except Exception as error:
             logger.exception(error)
             self._dispatch_event('winerp_error', error)
