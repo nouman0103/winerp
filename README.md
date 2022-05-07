@@ -1,6 +1,21 @@
 # winerp
 An IPC based on Websockets. Fast, Stable, and easy-to-use, for inter-communication between your processes or discord.py bots.
 
+> **BREAKING CHANGES (1.4.0):**  
+The message source name is passed to all registered routes.
+Instead of:
+> ```py
+> @ipc.route() # < v1.4.0
+> async def route_name():
+>     ...
+> ```
+> Use: 
+> ```py
+> @ipc.route() # >= v1.4.0
+> async def route_name(source):
+>     ...
+> ```
+
 ### Key Features
 
  - **Fast** with minimum recorded response time being `< 2ms`
