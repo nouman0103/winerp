@@ -3,8 +3,6 @@ from types import FunctionType
 import websockets
 import orjson
 import logging
-
-import winerp
 from .lib.message import WsMessage
 from .lib.payload import Payloads, MessagePayload, winerpObject, responseObject
 from .lib.errors import *
