@@ -3,8 +3,10 @@ from types import FunctionType
 import websockets
 import orjson
 import logging
+
+import winerp
 from .lib.message import WsMessage
-from .lib.payload import Payloads, MessagePayload
+from .lib.payload import Payloads, MessagePayload, winerpObject, responseObject
 from .lib.errors import *
 import uuid
 import traceback
@@ -48,6 +50,7 @@ class Client:
         self.max_data_size: float = 2 #MiB
         self.websocket = None
         self.__routes = {}
+        self.__sub_routes = {}
         self.listeners = {}
         self.event_listeners: Dict[str, asyncio.Future] = {}
         self._authorized: bool = False
@@ -79,7 +82,7 @@ class Client:
     async def send_message(self, data: Union[Any, WsMessage]):
         if not isinstance(data, WsMessage):
             data = data.__dict__
-
+        logger.debug(data)
         await self.websocket.send(orjson.dumps(data).decode("utf-8"))
     
     def __send_message(self, data):
@@ -162,7 +165,16 @@ class Client:
             return route_decorator(func)
         else:
             return route_decorator
-    
+
+    async def __purge_sub_routes(self, timeout, uuid):
+        await asyncio.sleep(timeout)
+        del self.__sub_routes[uuid]
+    def __register_object_funcs(self, winerp_object: winerpObject):
+        self.__sub_routes[winerp_object.uuid] = {}
+        for function_name, function_object in winerp_object.functions.items():
+            self.__sub_routes[winerp_object.uuid][function_name] = function_object
+        asyncio.create_task(self.__purge_sub_routes(winerp_object.object_expiry, winerp_object.uuid))
+
     async def ping(self, client = None, timeout: int = 60) -> bool:
         '''|coro|
 
@@ -196,6 +208,30 @@ class Client:
         await self.send_message(payload)
         resp = await self.__get_response(_uuid, asyncio.get_event_loop(), timeout=timeout)
         return resp.get("success", False)
+
+    async def call_function(self, destination, object_identifier, func_name, *args, **kwargs) -> bool:
+        if self._on_hold or self.websocket is None or not self.websocket.open:
+            raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
+        if not self._authorized:
+            raise UnauthorizedError("Client is not authorized!")
+        logger.debug("Calling a function IPC Server")
+        
+        _uuid = str(uuid.uuid4())
+        payload = MessagePayload(
+            type = Payloads.function_call,
+            id = self.local_name,
+            destination = destination,
+            uuid = _uuid,
+            data={
+                "__uuid__": object_identifier,
+                "__func__": func_name,
+                "__args__": list(args),
+                "__kwargs__": dict(kwargs)
+            }
+        )
+        await self.send_message(payload)
+        recv = await self.__get_response(_uuid, asyncio.get_event_loop(), timeout=30)
+        return recv
 
     def __get_response(
         self,
@@ -445,10 +481,68 @@ class Client:
 
             elif message.type.information:
                 if message.data:
-                    logger.info("Received an information bit from client: %s" % message.id)
+                    logger.debug("Received an information bit from client: %s" % message.id)
                     self._dispatch_event('winerp_information', message.data, message.id)
+
+            elif message.type.function_call:
+                logger.debug("Received an object function call.")
+                logger.debug(message.data)
+                payload = MessagePayload(
+                    type = Payloads.response,
+                    id = self.local_name,
+                    destination = message.id,
+                    uuid = message.uuid
+                )
+                try:
+                    called_function = self.__sub_routes[message.data["__uuid__"]][message.data["__func__"]]
+                    asyncio.create_task(
+                    self._fulfil_callback(
+                        payload,
+                        called_function,
+                        *message.data["__args__"],
+                        **message.data["__kwargs__"]
+                    )
+                )
+                except KeyError:
+                    payload = MessagePayload(
+                        type = Payloads.error,
+                        id = self.local_name,
+                        data = "The called function has either expired or has never been registered",
+                        traceback = "The called function has either expired or has never been registered",
+                        destination = message.id,
+                        uuid = message.uuid
+                    )
+                    self.__send_message(payload)
+
                 
 
+    def __parse_object(self, payload):
+        payload.pseudo_object = True
+        dummy_object = payload.data
+        payload.data = dummy_object.serialize()
+        self.__register_object_funcs(dummy_object)
+
+    async def _fulfil_callback(self, payload, function, *args, **kwargs):
+        try:
+            payload.data = await function(*args, **kwargs)
+            if not isinstance(payload.data, (int, float, str, bool, type(None), list, tuple, dict)):
+                payload.data = winerpObject(payload.data)
+
+            if type(payload.data) == winerpObject:
+                self.__parse_object(payload)
+            
+            self.__send_message(payload)
+        except Exception as error:
+            logger.exception("Failed to run the registered method")
+            self._dispatch_event('winerp_error', error)
+            payload.type = Payloads.error
+            payload.data = str(error)
+            payload.traceback = ''.join(
+                traceback.format_exception(
+                    TypeError, error, error.__traceback__
+                )
+            )
+        
     
     async def _fulfill_request(self, message: WsMessage):
         route = message.route
@@ -461,6 +555,8 @@ class Client:
 
         try:
             payload.data = await func(message.id, **data)
+            if type(payload.data) == winerpObject:
+                self.__parse_object(payload)
         except Exception as error:
             logger.exception(error)
             self._dispatch_event('winerp_error', error)
@@ -488,7 +584,7 @@ class Client:
                     )
                 )
                 self.__send_message(payload)
-    
+
     async def _dispatch(self, msg: WsMessage):
         data = msg.data
         _uuid = msg.uuid
@@ -499,7 +595,10 @@ class Client:
         
         future: asyncio.Future = self.listeners[_uuid]
         if not msg.type.error:
-            future.set_result(data)
+            if msg.pseudo_object:
+                future.set_result(responseObject(self, msg.id, data))
+            else:
+                future.set_result(data)
         else:
             future.set_exception(
                 ClientRuntimeError(msg.data)
