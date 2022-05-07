@@ -11,7 +11,7 @@ extras = {
 
 setup(
     name="winerp",
-    version="1.3.0",
+    version="1.4.0",
     description="Websocket based IPC for discord.py bots",
     long_description="...",
     long_description_content_type="text/markdown",
@@ -44,5 +44,5 @@ setup(
         },
     install_requires=["websockets", "websocket-server", "orjson"],
     extra_requires=extras,
-    python_requires=">=3.6",
+    python_requires=">=3.6, !=3.10.*, !=3.11.*",
 )
