@@ -557,7 +557,6 @@ class Client:
             payload.data = await func(message.id, **data)
             if type(payload.data) == winerpObject:
                 self.__parse_object(payload)
-
         except Exception as error:
             logger.exception(error)
             self._dispatch_event('winerp_error', error)
