@@ -554,7 +554,7 @@ class Client:
 
 
         try:
-            payload.data = await func(**data)
+            payload.data = await func(message.id, **data)
             if type(payload.data) == winerpObject:
                 self.__parse_object(payload)
 
