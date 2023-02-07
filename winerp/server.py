@@ -18,11 +18,14 @@ class Server:
     
     Parameters
     -----------
+    host: Optional[:class:`str`]
+        The host on which the server is running. Defaults to 127.0.0.1.
     port: Optional[:class:`int`]
         The port on which the server is running. Defaults to 13254.
     """
     def __init__(
         self,
+        host: str = "127.0.0.1",
         port: int = 13254
     ):
         self.websocket = WebsocketServer(host='127.0.0.1', port=port)
