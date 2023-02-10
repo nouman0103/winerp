@@ -29,6 +29,8 @@ class Client:
     local_name: :class:`str`
         The name which will be used to refer to this client.
         This should be unique to all the clients.
+    host: Optional[:class:`str`]
+        The port on which the server is running. Defaults to localhost.
     port: Optional[:class:`int`]
         The port on which the server is running. Defaults to 13254.
     reconnect: Optional[:class:`bool`]
@@ -38,10 +40,11 @@ class Client:
     def __init__(
         self,
         local_name: str,
+        host: str = "localhost",
         port: int = 13254,
         reconnect: bool = True
     ):
-        self.uri: str = f"ws://localhost:{port}"        
+        self.uri: str = f"ws://{host}:{port}"        
         self.local_name: str = local_name
         self.reconnect: bool = reconnect
         self.reconnect_threshold: int = 60
