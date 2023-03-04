@@ -28,7 +28,7 @@ class Server:
         host: str = "127.0.0.1",
         port: int = 13254
     ):
-        self.websocket = WebsocketServer(host='127.0.0.1', port=port)
+        self.websocket = WebsocketServer(host=host, port=port)
         self.websocket.set_fn_new_client(self.__on_client_connect)
         self.websocket.set_fn_message_received(self.__on_message)
         self.websocket.set_fn_client_left(self.__on_client_disconnect)
