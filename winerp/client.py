@@ -1,4 +1,5 @@
 import asyncio
+import typing
 from types import FunctionType
 import websockets
 import orjson
@@ -20,6 +21,7 @@ from typing import (
 logger = logging.getLogger(__name__)
 Coro = TypeVar('Coro', bound=Callable[..., Coroutine[Any, Any, Any]])
 
+
 class Client:
     r"""Represents a winerp Client.
     This class is used to interact with the Server
@@ -37,18 +39,19 @@ class Client:
         If set to True, the client will automatically try to reconnect to the winerp server
         every 60 seconds (default). This option is set to True by default.
     """
+
     def __init__(
-        self,
-        local_name: str,
-        host: str = "localhost",
-        port: int = 13254,
-        reconnect: bool = True
+            self,
+            local_name: str,
+            host: str = "localhost",
+            port: int = 13254,
+            reconnect: bool = True
     ):
-        self.uri: str = f"ws://{host}:{port}"        
+        self.uri: str = f"ws://{host}:{port}"
         self.local_name: str = local_name
         self.reconnect: bool = reconnect
         self.reconnect_threshold: int = 60
-        self.max_data_size: float = 2 #MiB
+        self.max_data_size: float = 2  # MiB
         self.websocket = None
         self.__routes = {}
         self.__sub_routes = {}
@@ -65,14 +68,14 @@ class Client:
             "on_winerp_information",
             "on_winerp_error"
         ]
-    
+
     @property
     def authorized(self) -> bool:
         '''
         :class:`bool`: Returns if the client is authorized by the server.
         '''
         return self._authorized
-    
+
     @property
     def on_hold(self) -> bool:
         '''
@@ -85,15 +88,15 @@ class Client:
             data = data.__dict__
         logger.debug(data)
         await self.websocket.send(orjson.dumps(data).decode("utf-8"))
-    
+
     def __send_message(self, data):
         asyncio.create_task(self.send_message(data))
-    
+
     async def __verify_client(self):
         payload = MessagePayload(
-            type = Payloads.verification,
-            id = self.local_name,
-            uuid = str(uuid.uuid4())
+            type=Payloads.verification,
+            id=self.local_name,
+            uuid=str(uuid.uuid4())
         )
         await self.send_message(payload)
         logger.info("Verification request sent")
@@ -102,7 +105,7 @@ class Client:
         if self.websocket is None or self.websocket.closed:
             logger.info("Connecting to Websocket")
             self.websocket = await websockets.connect(
-                self.uri, close_timeout=0, ping_interval=None, max_size=int(self.max_data_size*1048576)
+                self.uri, close_timeout=0, ping_interval=None, max_size=int(self.max_data_size * 1048576)
             )
             self._authorized = False
             self._dispatch_event('winerp_connect')
@@ -117,7 +120,7 @@ class Client:
             except:
                 logger.debug(f"Failed to reconnect. Retrying in {self.reconnect_threshold}s")
                 await asyncio.sleep(self.reconnect_threshold)
-        
+
     async def start(self) -> None:
         '''|coro|
 
@@ -150,16 +153,17 @@ class Client:
             InvalidRouteType
                 The function passed is not a coro.
         '''
+
         def route_decorator(func):
             if (name is None and func.__name__ in self.__routes) or (name is not None and name in self.__routes):
                 raise ValueError("Route name is already registered!")
-            
+
             if not asyncio.iscoroutinefunction(func):
                 raise InvalidRouteType("Route function must be a coro.")
-            
+
             self.__routes[name or func.__name__] = func
             return func
-            
+
         if isinstance(name, FunctionType):
             func = name
             name = name.__name__
@@ -167,16 +171,26 @@ class Client:
         else:
             return route_decorator
 
+    async def add_route_callback(self, callback: typing.Callable, name: str = None):
+        if name in self.__routes.keys() or callback.__name__ in self.__routes.keys():
+            raise KeyError(f"Route name is already registered!\nRoutes: {self.__routes}")
+        if not asyncio.iscoroutinefunction(callback):
+            raise InvalidRouteType('Route callback must be an asyncio coro.')
+
+        self.__routes[name or callback.__name__] = callback
+        return callback
+
     async def __purge_sub_routes(self, timeout, uuid):
         await asyncio.sleep(timeout)
         del self.__sub_routes[uuid]
+
     def __register_object_funcs(self, winerp_object: winerpObject):
         self.__sub_routes[winerp_object.uuid] = {}
         for function_name, function_object in winerp_object.functions.items():
             self.__sub_routes[winerp_object.uuid][function_name] = function_object
         asyncio.create_task(self.__purge_sub_routes(winerp_object.object_expiry, winerp_object.uuid))
 
-    async def ping(self, client = None, timeout: int = 60) -> bool:
+    async def ping(self, client=None, timeout: int = 60) -> bool:
         '''|coro|
 
         Pings the client and returns back if the ping was successful.
@@ -198,13 +212,13 @@ class Client:
         if not self._authorized:
             raise UnauthorizedError("Client is not authorized!")
         logger.debug("Pinging IPC Server")
-        
+
         _uuid = str(uuid.uuid4())
         payload = MessagePayload(
-            type = Payloads.ping,
-            id = self.local_name,
-            destination = client,
-            uuid = _uuid
+            type=Payloads.ping,
+            id=self.local_name,
+            destination=client,
+            uuid=_uuid
         )
         await self.send_message(payload)
         resp = await self.__get_response(_uuid, asyncio.get_event_loop(), timeout=timeout)
@@ -216,13 +230,13 @@ class Client:
         if not self._authorized:
             raise UnauthorizedError("Client is not authorized!")
         logger.debug("Calling a function IPC Server")
-        
+
         _uuid = str(uuid.uuid4())
         payload = MessagePayload(
-            type = Payloads.function_call,
-            id = self.local_name,
-            destination = destination,
-            uuid = _uuid,
+            type=Payloads.function_call,
+            id=self.local_name,
+            destination=destination,
+            uuid=_uuid,
             data={
                 "__uuid__": object_identifier,
                 "__func__": func_name,
@@ -235,21 +249,21 @@ class Client:
         return recv
 
     def __get_response(
-        self,
-        _uuid: str,
-        loop: asyncio.AbstractEventLoop,
-        timeout: int = 60
+            self,
+            _uuid: str,
+            loop: asyncio.AbstractEventLoop,
+            timeout: int = 60
     ):
         future = loop.create_future()
         self.listeners[_uuid] = future
-        return asyncio.wait_for(future, timeout, loop=loop)
+        return asyncio.wait_for(future, timeout)
 
     async def request(
-        self,
-        route: str,
-        source: str,
-        timeout: int = 60,
-        **kwargs
+            self,
+            route: str,
+            source: str,
+            timeout: int = 60,
+            **kwargs
     ) -> any:
         '''|coro|
 
@@ -288,33 +302,33 @@ class Client:
                 raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
             if not self._authorized:
                 raise UnauthorizedError("Client is not authorized!")
-            
+
             if not route or not source:
                 raise ValueError("Missing required information for this request")
 
             logger.info("Requesting IPC Server for %r", route)
-        
+
             _uuid = str(uuid.uuid4())
             payload = MessagePayload(
-                type = Payloads.request,
-                id = self.local_name,
-                destination = source,
-                route = route,
-                data = kwargs,
-                uuid = _uuid
+                type=Payloads.request,
+                id=self.local_name,
+                destination=source,
+                route=route,
+                data=kwargs,
+                uuid=_uuid
             )
 
             await self.send_message(payload)
             recv = await self.__get_response(_uuid, asyncio.get_event_loop(), timeout=timeout)
             return recv
-        
+
         else:
             raise ClientNotReadyError("The client has not been started or has disconnected")
 
     async def inform(
-        self,
-        data: any,
-        destinations: list
+            self,
+            data: any,
+            destinations: list
     ):
         '''|coro|
 
@@ -352,16 +366,15 @@ class Client:
                 destinations = [destinations]
 
             payload = MessagePayload(
-                type = Payloads.information,
-                id = self.local_name,
-                route = destinations,
-                data = data,
+                type=Payloads.information,
+                id=self.local_name,
+                route=destinations,
+                data=data,
             )
 
             await self.send_message(payload)
         else:
             raise ClientNotReadyError("The client has not been started or has disconnected")
-    
 
     async def wait_until_ready(self):
         '''|coro|
@@ -378,9 +391,9 @@ class Client:
         await self.wait_for('winerp_disconnect', None)
 
     def wait_for(
-        self,
-        event: str,
-        timeout: int = 60,
+            self,
+            event: str,
+            timeout: int = 60,
     ):
         '''|coro|
 
@@ -423,7 +436,6 @@ class Client:
         listeners.append(future)
         return asyncio.wait_for(future, timeout)
 
-
     async def __on_message(self):
         logger.info("Listening to messages")
         while True:
@@ -451,19 +463,19 @@ class Client:
                 if message.route not in self.__routes:
                     logger.info("Failed to fulfill request, route not found")
                     payload = MessagePayload(
-                        type = Payloads.error,
-                        id = self.local_name,
-                        data = "Route not found",
-                        traceback = "Route not found",
-                        destination = message.id,
-                        uuid = message.uuid
+                        type=Payloads.error,
+                        id=self.local_name,
+                        data="Route not found",
+                        traceback="Route not found",
+                        destination=message.id,
+                        uuid=message.uuid
                     )
                     self.__send_message(payload)
                     return
                 logger.info("Fulfilling request @ route: %s" % message.route)
                 asyncio.create_task(self._fulfill_request(message))
                 self._dispatch_event('winerp_request')
-            
+
             elif message.type.response:
                 logger.info("Received a response from server @ uuid: %s" % message.uuid)
                 asyncio.create_task(self._dispatch(message))
@@ -472,7 +484,8 @@ class Client:
             elif message.type.error:
                 if message.data == "Already authorized.":
                     self._on_hold = True
-                    logger.warn("Another client is already connected. Requests will be enabled when the other is disconnected.")
+                    logger.warn(
+                        "Another client is already connected. Requests will be enabled when the other is disconnected.")
                 else:
                     logger.debug("Failed to fulfill request: %s" % message.data)
                     self._dispatch_event('winerp_error', message.data)
@@ -489,33 +502,31 @@ class Client:
                 logger.debug("Received an object function call.")
                 logger.debug(message.data)
                 payload = MessagePayload(
-                    type = Payloads.response,
-                    id = self.local_name,
-                    destination = message.id,
-                    uuid = message.uuid
+                    type=Payloads.response,
+                    id=self.local_name,
+                    destination=message.id,
+                    uuid=message.uuid
                 )
                 try:
                     called_function = self.__sub_routes[message.data["__uuid__"]][message.data["__func__"]]
                     asyncio.create_task(
-                    self._fulfil_callback(
-                        payload,
-                        called_function,
-                        *message.data["__args__"],
-                        **message.data["__kwargs__"]
+                        self._fulfil_callback(
+                            payload,
+                            called_function,
+                            *message.data["__args__"],
+                            **message.data["__kwargs__"]
+                        )
                     )
-                )
                 except KeyError:
                     payload = MessagePayload(
-                        type = Payloads.error,
-                        id = self.local_name,
-                        data = "The called function has either expired or has never been registered",
-                        traceback = "The called function has either expired or has never been registered",
-                        destination = message.id,
-                        uuid = message.uuid
+                        type=Payloads.error,
+                        id=self.local_name,
+                        data="The called function has either expired or has never been registered",
+                        traceback="The called function has either expired or has never been registered",
+                        destination=message.id,
+                        uuid=message.uuid
                     )
                     self.__send_message(payload)
-
-                
 
     def __parse_object(self, payload):
         payload.pseudo_object = True
@@ -531,7 +542,7 @@ class Client:
 
             if type(payload.data) == winerpObject:
                 self.__parse_object(payload)
-            
+
             self.__send_message(payload)
         except Exception as error:
             logger.exception("Failed to run the registered method")
@@ -543,8 +554,7 @@ class Client:
                     TypeError, error, error.__traceback__
                 )
             )
-        
-    
+
     async def _fulfill_request(self, message: WsMessage):
         route = message.route
         func = self.__routes[route]
@@ -552,7 +562,6 @@ class Client:
         payload = MessagePayload().from_message(message)
         payload.type = Payloads.response
         payload.id = self.local_name
-
 
         try:
             payload.data = await func(message.id, **data)
@@ -593,7 +602,7 @@ class Client:
             raise MissingUUIDError('UUID is missing.')
         if _uuid not in self.listeners:
             raise UUIDNotFoundError(f"UUID {_uuid} not found in listeners.")
-        
+
         future: asyncio.Future = self.listeners[_uuid]
         if not msg.type.error:
             if msg.pseudo_object:
@@ -627,7 +636,7 @@ class Client:
         '''
         if func.__name__ not in self.events:
             raise NameError("Invalid winerp event")
-        
+
         if not asyncio.iscoroutinefunction(func):
             raise TypeError("Event function must be a coro.")
 
@@ -651,25 +660,23 @@ class Client:
         else:
             self._schedule_event(coro, f'on_{event_name}', *args, **kwargs)
 
-    
     def _schedule_event(
-        self,
-        coro: Callable[..., Coroutine[Any, Any, Any]],
-        event_name: str,
-        *args: Any,
-        **kwargs: Any,
+            self,
+            coro: Callable[..., Coroutine[Any, Any, Any]],
+            event_name: str,
+            *args: Any,
+            **kwargs: Any,
     ) -> asyncio.Task:
         wrapped = self._run_event(coro, event_name, *args, **kwargs)
         # Schedules the task
         return asyncio.create_task(wrapped, name=f'winerp: {event_name}')
-    
 
     async def _run_event(
-        self,
-        coro: Callable[..., Coroutine[Any, Any, Any]],
-        event_name: str,
-        *args: Any,
-        **kwargs: Any,
+            self,
+            coro: Callable[..., Coroutine[Any, Any, Any]],
+            event_name: str,
+            *args: Any,
+            **kwargs: Any,
     ) -> None:
         try:
             await coro(*args, **kwargs)
