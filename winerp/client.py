@@ -166,7 +166,7 @@ class Client:
         else:
             return route_decorator
 
-    async def add_route(self, callback: typing.Coroutine, name: str = None):
+    async def add_route(self, callback: typing.Callable, name: str = None):
         """|coro|
         A function to register a route. Either a decorator or this function can be used to register a route.
 
