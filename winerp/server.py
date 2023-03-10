@@ -1,12 +1,14 @@
+import logging
+
+import orjson
 from websocket_server import WebsocketServer
+
 from .lib.message import WsMessage
 from .lib.payload import Payloads, MessagePayload
-from .lib.errors import *
-import orjson
 
-import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
 
 class Server:
     """
@@ -23,10 +25,11 @@ class Server:
     port: Optional[:class:`int`]
         The port on which the server is running. Defaults to 13254.
     """
+
     def __init__(
-        self,
-        host: str = "127.0.0.1",
-        port: int = 13254
+            self,
+            host: str = "127.0.0.1",
+            port: int = 13254
     ):
         self.websocket = WebsocketServer(host=host, port=port)
         self.websocket.set_fn_new_client(self.__on_client_connect)
@@ -35,12 +38,12 @@ class Server:
         self.active_clients = {}
         self.pending_verification = {}
         self.on_hold_connections = {}
-    
+
     @property
     def client_count(self) -> int:
-        '''
+        """
         :class:`int`: Returns the number of connected clients
-        '''
+        """
         return len(self.active_clients)
 
     def __on_client_connect(self, client, _):
@@ -62,7 +65,7 @@ class Server:
                     del self.pending_verification[self.on_hold_connections[cid]["id"]]
                     del self.on_hold_connections[cid]
                 return
-        
+
         for cid, each_client in self.on_hold_connections.items():
             if each_client["id"] == client["address"][1]:
                 del self.on_hold_connections[cid]
@@ -71,8 +74,6 @@ class Server:
         if client["address"][1] in self.pending_verification:
             del self.pending_verification[client["address"][1]]
 
-        
-    
     def __send_message(self, client, message):
         if not isinstance(message, dict):
             message = message.to_dict()
@@ -118,7 +119,7 @@ class Server:
                 payload.traceback = "Not authorized."
                 self.__send_error(client, payload)
                 return
-        
+
         if msg.type.information:
             logger.debug("Received Information Message from client %s" % client['address'][1])
             payload.type = Payloads.information
@@ -140,7 +141,7 @@ class Server:
                 payload.data = {"success": True}
             else:
                 payload.data = {"success": False}
-                
+
             self.__send_message(
                 client,
                 payload
@@ -186,11 +187,10 @@ class Server:
                 payload
             )
             logger.debug("Response forwarded to %s" % self.active_clients[msg.destination]["client"]['address'][1])
-            
-            
+
     def start(self):
-        '''
+        """
         Starts the server on the given port.
-        '''
+        """
         logger.info("Started Websocket Server")
         self.websocket.run_forever()

@@ -1,22 +1,24 @@
 import asyncio
-import typing
-from types import FunctionType
-import websockets
-import orjson
 import logging
-from .lib.message import WsMessage
-from .lib.payload import Payloads, MessagePayload, winerpObject, responseObject
-from .lib.errors import *
-import uuid
 import traceback
+import typing
+import uuid
+from types import FunctionType
 from typing import (
     Any,
     Callable,
     Coroutine,
     TypeVar,
     Union,
-    Dict,
 )
+
+import orjson
+import websockets
+
+from .lib.errors import *
+from .lib.events import Events
+from .lib.message import WsMessage
+from .lib.payload import Payloads, MessagePayload, winerpObject, responseObject
 
 logger = logging.getLogger(__name__)
 Coro = TypeVar('Coro', bound=Callable[..., Coroutine[Any, Any, Any]])
@@ -56,31 +58,23 @@ class Client:
         self.__routes = {}
         self.__sub_routes = {}
         self.listeners = {}
-        self.event_listeners: Dict[str, asyncio.Future] = {}
+
         self._authorized: bool = False
         self._on_hold = False
-        self.events = [
-            "on_winerp_connect",
-            "on_winerp_ready",
-            "on_winerp_disconnect",
-            "on_winerp_request",
-            "on_winerp_response",
-            "on_winerp_information",
-            "on_winerp_error"
-        ]
+        self.events = Events(logger)
 
     @property
     def authorized(self) -> bool:
-        '''
+        """
         :class:`bool`: Returns if the client is authorized by the server.
-        '''
+        """
         return self._authorized
 
     @property
     def on_hold(self) -> bool:
-        '''
+        """
         :class:`bool`: Returns True if the client is on hold by the server. A client is put on hold if a client of same local name is already connected to the server.
-        '''
+        """
         return self._on_hold
 
     async def send_message(self, data: Union[Any, WsMessage]):
@@ -108,7 +102,7 @@ class Client:
                 self.uri, close_timeout=0, ping_interval=None, max_size=int(self.max_data_size * 1048576)
             )
             self._authorized = False
-            self._dispatch_event('winerp_connect')
+            self.events.dispatch_event('winerp_connect')
             logger.info("Connected to Websocket")
 
     async def __reconnect_client(self) -> bool:
@@ -117,12 +111,13 @@ class Client:
                 await self.__connect()
                 await self.__verify_client()
                 return True
-            except:
-                logger.debug(f"Failed to reconnect. Retrying in {self.reconnect_threshold}s")
+            except Exception as e:
+                logger.debug(f"Failed to reconnect. Retrying in {self.reconnect_threshold}s.")
+                logger.error(f"While trying to reconnect there has been an error. {str(e)}")
                 await asyncio.sleep(self.reconnect_threshold)
 
     async def start(self) -> None:
-        '''|coro|
+        """|coro|
 
         Connects the client to the server.
 
@@ -134,7 +129,7 @@ class Client:
         Returns
         -------
             :class:`None`
-        '''
+        """
         if self.websocket is None or self.websocket.closed:
             await self.__connect()
             await self.__verify_client()
@@ -143,7 +138,7 @@ class Client:
             raise ConnectionError("Websocket is already connected!")
 
     def route(self, name: str = None):
-        '''
+        """
         A decorator to register your route. The route name should be unique.
 
         Raises
@@ -152,26 +147,46 @@ class Client:
                 Route name already exists.
             InvalidRouteType
                 The function passed is not a coro.
-        '''
+        """
 
-        def route_decorator(func):
-            if (name is None and func.__name__ in self.__routes) or (name is not None and name in self.__routes):
+        def route_decorator(_route_func):
+            if (name is None and _route_func.__name__ in self.__routes) or (name is not None and name in self.__routes):
                 raise ValueError("Route name is already registered!")
 
-            if not asyncio.iscoroutinefunction(func):
+            if not asyncio.iscoroutinefunction(_route_func):
                 raise InvalidRouteType("Route function must be a coro.")
 
-            self.__routes[name or func.__name__] = func
-            return func
+            self.__routes[name or _route_func.__name__] = _route_func
+            return _route_func
 
         if isinstance(name, FunctionType):
-            func = name
+            _route_func = name
             name = name.__name__
-            return route_decorator(func)
+            return route_decorator(_route_func)
         else:
             return route_decorator
 
-    async def add_route_callback(self, callback: typing.Callable, name: str = None):
+    async def add_route(self, callback: typing.Coroutine, name: str = None):
+        """|coro|
+        A function to register a route. Either a decorator or this function can be used to register a route.
+
+        Parameters
+        ----------
+        callback
+        name
+
+        Returns
+        -------
+        typing.Callable
+
+        Raises
+        -------
+            KeyError
+                Route name already exists.
+            InvalidRouteType
+                The function passed is not a coro.
+
+        """
         if name in self.__routes.keys() or callback.__name__ in self.__routes.keys():
             raise KeyError(f"Route name is already registered!\nRoutes: {self.__routes}")
         if not asyncio.iscoroutinefunction(callback):
@@ -180,9 +195,9 @@ class Client:
         self.__routes[name or callback.__name__] = callback
         return callback
 
-    async def __purge_sub_routes(self, timeout, uuid):
+    async def __purge_sub_routes(self, timeout, _uuid):
         await asyncio.sleep(timeout)
-        del self.__sub_routes[uuid]
+        del self.__sub_routes[_uuid]
 
     def __register_object_funcs(self, winerp_object: winerpObject):
         self.__sub_routes[winerp_object.uuid] = {}
@@ -191,7 +206,7 @@ class Client:
         asyncio.create_task(self.__purge_sub_routes(winerp_object.object_expiry, winerp_object.uuid))
 
     async def ping(self, client=None, timeout: int = 60) -> bool:
-        '''|coro|
+        """|coro|
 
         Pings the client and returns back if the ping was successful.
 
@@ -206,7 +221,7 @@ class Client:
         --------
             :class:`bool`
                 If the ping is successful, it returns True.
-        '''
+        """
         if self._on_hold or self.websocket is None or not self.websocket.open:
             raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
         if not self._authorized:
@@ -265,7 +280,7 @@ class Client:
             timeout: int = 60,
             **kwargs
     ) -> any:
-        '''|coro|
+        """|coro|
 
         Requests the server for a response.
         Resolves when the response is received matching the UUID.
@@ -296,7 +311,7 @@ class Client:
         --------
             :class:`any`
                 The data associated with the message.
-        '''
+        """
         if self.websocket is not None and self.websocket.open:
             if self._on_hold:
                 raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
@@ -330,7 +345,7 @@ class Client:
             data: any,
             destinations: list
     ):
-        '''|coro|
+        """|coro|
 
         Sends data to other connected clients. There is no tracking of the data so there won't be any error
         if it doesn't reach its specified destination.
@@ -341,7 +356,7 @@ class Client:
         -----------
         data: :class:`Any`
             The data to redirect.
-        destination: :class:`list`
+        destinations: :class:`list`
             The list of destinations.
 
         Raises
@@ -354,7 +369,7 @@ class Client:
         Returns
         --------
             :class:`None`
-        '''
+        """
         if self.websocket is not None and self.websocket.open:
             if self._on_hold:
                 raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
@@ -377,30 +392,30 @@ class Client:
             raise ClientNotReadyError("The client has not been started or has disconnected")
 
     async def wait_until_ready(self):
-        '''|coro|
+        """|coro|
 
         Waits until the client is ready to send or accept requests.        
-        '''
+        """
         await self.wait_for('winerp_ready', None)
 
     async def wait_until_disconnected(self):
-        '''|coro|
+        """|coro|
         
         Waits until the client is disconnected.
-        '''
+        """
         await self.wait_for('winerp_disconnect', None)
 
     def wait_for(
             self,
             event: str,
-            timeout: int = 60,
+            timeout: Union[int, None] = None,
     ):
-        '''|coro|
+        """|coro|
 
         Waits for a WebSocket event to be dispatched.
 
         The timeout parameter is passed onto asyncio.wait_for().
-        By default, it does not timeout.
+        By default, it does not have timeout.
 
         In case the event returns multiple arguments, a tuple containing those arguments is returned instead.
         Please check the documentation for a list of events and their parameters.
@@ -423,26 +438,27 @@ class Client:
         --------
             :class:`Any`
                 The payload for the event that meets the requirements.
-        '''
+        """
         future = asyncio.get_event_loop().create_future()
 
         ev = event.lower()
         try:
-            listeners = self.event_listeners[ev]
+            listeners = self.events.listeners[ev]
         except KeyError:
             listeners = []
-            self.event_listeners[ev] = listeners
+            self.events.listeners[ev] = listeners
 
         listeners.append(future)
         return asyncio.wait_for(future, timeout)
 
     async def __on_message(self):
         logger.info("Listening to messages")
+        message = None
         while True:
             try:
                 message = WsMessage(orjson.loads(await self.websocket.recv()))
             except websockets.exceptions.ConnectionClosedError:
-                self._dispatch_event('winerp_disconnect')
+                self.events.dispatch_event('winerp_disconnect')
                 if self.reconnect:
                     if not await self.__reconnect_client():
                         break
@@ -451,7 +467,7 @@ class Client:
 
             if message.type.success and not self._authorized:
                 logger.info("Authorized Successfully")
-                self._dispatch_event('winerp_ready')
+                self.events.dispatch_event('winerp_ready')
                 self._authorized = True
                 self._on_hold = False
 
@@ -474,21 +490,21 @@ class Client:
                     return
                 logger.info("Fulfilling request @ route: %s" % message.route)
                 asyncio.create_task(self._fulfill_request(message))
-                self._dispatch_event('winerp_request')
+                self.events.dispatch_event('winerp_request')
 
             elif message.type.response:
                 logger.info("Received a response from server @ uuid: %s" % message.uuid)
                 asyncio.create_task(self._dispatch(message))
-                self._dispatch_event('winerp_response')
+                self.events.dispatch_event('winerp_response')
 
             elif message.type.error:
                 if message.data == "Already authorized.":
                     self._on_hold = True
-                    logger.warn(
+                    logger.warning(
                         "Another client is already connected. Requests will be enabled when the other is disconnected.")
                 else:
                     logger.debug("Failed to fulfill request: %s" % message.data)
-                    self._dispatch_event('winerp_error', message.data)
+                    self.events.dispatch_event('winerp_error', message.data)
 
                 if message.uuid is not None:
                     asyncio.create_task(self._dispatch(message))
@@ -496,7 +512,7 @@ class Client:
             elif message.type.information:
                 if message.data:
                     logger.debug("Received an information bit from client: %s" % message.id)
-                    self._dispatch_event('winerp_information', message.data, message.id)
+                    self.events.dispatch_event('winerp_information', message.data, message.id)
 
             elif message.type.function_call:
                 logger.debug("Received an object function call.")
@@ -546,7 +562,7 @@ class Client:
             self.__send_message(payload)
         except Exception as error:
             logger.exception("Failed to run the registered method")
-            self._dispatch_event('winerp_error', error)
+            self.events.dispatch_event('winerp_error', error)
             payload.type = Payloads.error
             payload.data = str(error)
             payload.traceback = ''.join(
@@ -569,7 +585,7 @@ class Client:
                 self.__parse_object(payload)
         except Exception as error:
             logger.exception(error)
-            self._dispatch_event('winerp_error', error)
+            self.events.dispatch_event('winerp_error', error)
             etype = type(error)
             trace = error.__traceback__
             lines = traceback.format_exception(etype, error, trace)
@@ -583,7 +599,7 @@ class Client:
                 await self.send_message(payload)
             except TypeError as error:
                 logger.exception("Failed to convert data to json")
-                self._dispatch_event('winerp_error', error)
+                self.events.dispatch_event('winerp_error', error)
                 payload.type = Payloads.error
                 payload.data = str(error)
                 payload.traceback = ''.join(
@@ -613,73 +629,3 @@ class Client:
             future.set_exception(
                 ClientRuntimeError(msg.data)
             )
-
-    def event(self, func: Coro, /) -> Coro:
-        '''
-        Registers a function for the event.
-
-        The available events are:
-            | ``on_winerp_connect``: The client has successfully connected to the server.
-            | ``on_winerp_ready``: The client is ready to recieve and send requests.
-            | ``on_winerp_disconnect``: The client has disconnected from the server.
-            | ``on_winerp_request``: The server sent new request.
-            | ``on_winerp_response``: The server sent back a response to a previous request.
-            | ``on_winerp_information``: The server sent some data sourced by a client.
-            | ``on_winerp_error``: An error occured during request processing.
-        
-        Raises
-        -------
-            NameError
-                Invalid winerp event name.
-            TypeError
-                The event function is not a coro.
-        '''
-        if func.__name__ not in self.events:
-            raise NameError("Invalid winerp event")
-
-        if not asyncio.iscoroutinefunction(func):
-            raise TypeError("Event function must be a coro.")
-
-        setattr(self, func.__name__, func)
-        logger.debug(('%s has successfully been registered as an event', func.__name__))
-        return func
-
-    def _dispatch_event(self, event_name: str, *args, **kwargs):
-        logger.debug('Event Dispatch -> %r', event_name)
-        try:
-            for future in self.event_listeners[event_name]:
-                future.set_result(None)
-                logger.debug('Event %r has been dispatched', event_name)
-        except KeyError:
-            ...
-
-        try:
-            coro = getattr(self, f'on_{event_name}')
-        except AttributeError:
-            pass
-        else:
-            self._schedule_event(coro, f'on_{event_name}', *args, **kwargs)
-
-    def _schedule_event(
-            self,
-            coro: Callable[..., Coroutine[Any, Any, Any]],
-            event_name: str,
-            *args: Any,
-            **kwargs: Any,
-    ) -> asyncio.Task:
-        wrapped = self._run_event(coro, event_name, *args, **kwargs)
-        # Schedules the task
-        return asyncio.create_task(wrapped, name=f'winerp: {event_name}')
-
-    async def _run_event(
-            self,
-            coro: Callable[..., Coroutine[Any, Any, Any]],
-            event_name: str,
-            *args: Any,
-            **kwargs: Any,
-    ) -> None:
-        try:
-            await coro(*args, **kwargs)
-        except Exception:
-            # TODO
-            traceback.print_exc()

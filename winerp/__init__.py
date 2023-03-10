@@ -9,6 +9,6 @@ An extension module to facilitate creation of bot commands.
 """
 
 from .client import Client
-from .server import Server
-from .lib.payload import winerpObject
 from .lib.errors import *
+from .lib.payload import winerpObject
+from .server import Server
