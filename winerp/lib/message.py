@@ -15,93 +15,93 @@ class WsMessage:
     
     @property
     def type(self) -> PayloadTypes:
-        '''
+        """
         :class:`~winerp.lib.payload.PayloadTypes`: Returns the type of the message.
-        '''
+        """
         return PayloadTypes(self._message["type"])
     
     @property
     def id(self) -> int:
-        '''
+        """
         :class:`int`: Returns the id of the bot.
-        '''
+        """
         return self._message.get("id")
     
     @property
     def destination(self) -> str:
-        '''
+        """
         :class:`str`: Returns the destination of the message.
-        '''
+        """
         return self._message.get("destination")
     
     @property
     def route(self) -> str:
-        '''
+        """
         :class:`str`: Returns the route of the message.
-        '''
+        """
         return self._message.get("route")
     
     @property
     def uuid(self) -> str:
-        '''
+        """
         :class:`str`: Returns the unique id associated with this message.
-        '''
+        """
         return self._message.get("uuid")
     
     @property
     def data(self) -> any:
-        '''
+        """
         :class:`Any`: Returns the data associated with the message.
-        '''
+        """
         return self._message.get("data")
     
     @property
     def error(self) -> str:
-        '''
+        """
         :class:`str`: Returns the error associated with the message.
-        '''
+        """
         return self._message.get("error")
     
     @error.setter
     def error(self, error: str):
-        '''
+        """
         Sets the error associated with the message.
-        '''
+        """
         self._message["error"] = error
     
     @property
     def traceback(self) -> str:
-        '''
+        """
         :class:`str`: Returns the error associated with the message.
-        '''
+        """
         return self._message.get("traceback")
     
     @traceback.setter
     def traceback(self, traceback: str):
-        '''
+        """
         Sets the error associated with the message.
-        '''
+        """
         self._message["traceback"] = traceback
 
     @property
     def pseudo_object(self) -> bool:
-        '''
+        """
         :class:`str`: Returns the error associated with the message.
-        '''
+        """
         return self._message.get("pseudo_object")
-    
+
 
     @pseudo_object.setter
     def pseudo_object(self, pseudo_object: bool):
-        '''
+        """
         Sets the error associated with the message.
-        '''
+        """
         self._message["pseudo_object"] = pseudo_object
 
     def to_dict(self) -> dict:
-        '''
+        """
         :class:`dict`: Returns the message as a `dict` type.
-        '''
+        """
         return {
             'type': self.type,
             'id': self.id,
