@@ -166,7 +166,7 @@ class responseObject:
     
 
     async def __function_call(self, function_name, is_it_coro, *args, **kwargs):
-        return await self.__ipc.call_function(self.__source, self.__uuid__, function_name, *args, **kwargs)
+        return await self.__ipc._call_function(self.__source, self.__uuid__, function_name, *args, **kwargs)
 
 
 
