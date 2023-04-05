@@ -214,6 +214,29 @@ class Client:
         self.__routes[name or callback.__name__] = callback
         return callback
 
+    def remove_route(self, name: str):
+        """
+        Removes a route from the registered routes.
+        
+        Parameters
+        ----------
+        name
+            The name of the route to be removed.
+
+        Returns
+        -------
+        None
+
+        Raises
+        -------
+            KeyError
+                Route name does not exist.
+        """
+        if name in self.__routes:
+            del self.__routes[name]
+        else:
+            raise KeyError(f"Route name {name} does not exist!")
+
     async def __purge_sub_routes(self, timeout, _uuid):
         await asyncio.sleep(timeout)
         del self.__sub_routes[_uuid]
