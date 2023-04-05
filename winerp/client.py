@@ -61,7 +61,8 @@ class Client:
 
         self._authorized: bool = False
         self._on_hold = False
-        self.events = Events(logger)
+        self.__events = Events(logger)
+        self.event = self.__events.event
 
     @property
     def authorized(self) -> bool:
@@ -102,7 +103,7 @@ class Client:
                 self.uri, close_timeout=0, ping_interval=None, max_size=int(self.max_data_size * 1048576)
             )
             self._authorized = False
-            self.events.dispatch_event('winerp_connect')
+            self.__events.dispatch_event('winerp_connect')
             logger.info("Connected to Websocket")
 
     async def __reconnect_client(self) -> bool:
@@ -443,10 +444,10 @@ class Client:
 
         ev = event.lower()
         try:
-            listeners = self.events.listeners[ev]
+            listeners = self.__events.listeners[ev]
         except KeyError:
             listeners = []
-            self.events.listeners[ev] = listeners
+            self.__events.listeners[ev] = listeners
 
         listeners.append(future)
         return asyncio.wait_for(future, timeout)
@@ -458,7 +459,7 @@ class Client:
             try:
                 message = WsMessage(orjson.loads(await self.websocket.recv()))
             except websockets.exceptions.ConnectionClosedError:
-                self.events.dispatch_event('winerp_disconnect')
+                self.__events.dispatch_event('winerp_disconnect')
                 if self.reconnect:
                     if not await self.__reconnect_client():
                         break
@@ -467,7 +468,7 @@ class Client:
 
             if message.type.success and not self._authorized:
                 logger.info("Authorized Successfully")
-                self.events.dispatch_event('winerp_ready')
+                self.__events.dispatch_event('winerp_ready')
                 self._authorized = True
                 self._on_hold = False
 
@@ -490,12 +491,12 @@ class Client:
                     return
                 logger.info("Fulfilling request @ route: %s" % message.route)
                 asyncio.create_task(self._fulfill_request(message))
-                self.events.dispatch_event('winerp_request')
+                self.__events.dispatch_event('winerp_request')
 
             elif message.type.response:
                 logger.info("Received a response from server @ uuid: %s" % message.uuid)
                 asyncio.create_task(self._dispatch(message))
-                self.events.dispatch_event('winerp_response')
+                self.__events.dispatch_event('winerp_response')
 
             elif message.type.error:
                 if message.data == "Already authorized.":
@@ -504,7 +505,7 @@ class Client:
                         "Another client is already connected. Requests will be enabled when the other is disconnected.")
                 else:
                     logger.debug("Failed to fulfill request: %s" % message.data)
-                    self.events.dispatch_event('winerp_error', message.data)
+                    self.__events.dispatch_event('winerp_error', message.data)
 
                 if message.uuid is not None:
                     asyncio.create_task(self._dispatch(message))
@@ -512,7 +513,7 @@ class Client:
             elif message.type.information:
                 if message.data:
                     logger.debug("Received an information bit from client: %s" % message.id)
-                    self.events.dispatch_event('winerp_information', message.data, message.id)
+                    self.__events.dispatch_event('winerp_information', message.data, message.id)
 
             elif message.type.function_call:
                 logger.debug("Received an object function call.")
@@ -562,7 +563,7 @@ class Client:
             self.__send_message(payload)
         except Exception as error:
             logger.exception("Failed to run the registered method")
-            self.events.dispatch_event('winerp_error', error)
+            self.__events.dispatch_event('winerp_error', error)
             payload.type = Payloads.error
             payload.data = str(error)
             payload.traceback = ''.join(
@@ -585,7 +586,7 @@ class Client:
                 self.__parse_object(payload)
         except Exception as error:
             logger.exception(error)
-            self.events.dispatch_event('winerp_error', error)
+            self.__events.dispatch_event('winerp_error', error)
             etype = type(error)
             trace = error.__traceback__
             lines = traceback.format_exception(etype, error, trace)
@@ -599,7 +600,7 @@ class Client:
                 await self.send_message(payload)
             except TypeError as error:
                 logger.exception("Failed to convert data to json")
-                self.events.dispatch_event('winerp_error', error)
+                self.__events.dispatch_event('winerp_error', error)
                 payload.type = Payloads.error
                 payload.data = str(error)
                 payload.traceback = ''.join(
