@@ -323,7 +323,7 @@ class Client:
             source: str,
             timeout: int = 60,
             **kwargs
-    ) -> any:
+    ) -> Any:
         """|coro|
 
         Requests the server for a response.
@@ -353,7 +353,7 @@ class Client:
         
         Returns
         --------
-            :class:`any`
+            :class:`Any`
                 The data associated with the message.
         """
         if self.websocket is not None and self.websocket.open:
@@ -386,7 +386,7 @@ class Client:
 
     async def inform(
             self,
-            data: any,
+            data: Any,
             destinations: list
     ):
         """|coro|
