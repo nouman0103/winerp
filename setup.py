@@ -44,5 +44,5 @@ setup(
         },
     install_requires=["websockets", "websocket-server", "orjson"],
     extra_requires=extras,
-    python_requires=">=3.6, !=3.10.*, !=3.11.*",
+    python_requires=">=3.6",
 )
