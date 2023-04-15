@@ -35,6 +35,9 @@ pip install git+https://www.github.com/BlackThunder01001/winerp
 ### Working:
 This library uses a central server for communication between multiple clients. You can connect a large number of clients for sharing data, and data can be shared between any connected client.
 
+![winerp-server-working](https://user-images.githubusercontent.com/40216575/232253783-7f5b625e-a08d-4e3d-8306-50684ea396b6.png)
+
+
 1) Import the library:
 ```py
 import winerp
