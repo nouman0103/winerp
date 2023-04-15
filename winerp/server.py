@@ -15,6 +15,9 @@ from .lib.payload import Payloads, MessagePayload
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+handler = logging.StreamHandler()
+handler.setLevel(logging.INFO)
+logger.addHandler(handler)
 
 class Server:
     """
