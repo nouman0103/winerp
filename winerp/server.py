@@ -1,8 +1,14 @@
+def noop(*args, **kwargs):
+    pass
+    
 import logging
+original_basicConfig = logging.basicConfig
+logging.basicConfig = noop
+
+from websocket_server import WebsocketServer
+logging.basicConfig = original_basicConfig
 
 import orjson
-from websocket_server import WebsocketServer
-
 from .lib.message import WsMessage
 from .lib.payload import Payloads, MessagePayload
 
