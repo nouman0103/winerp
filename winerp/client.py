@@ -42,7 +42,7 @@ class Client:
 
     Parameters
     -----------
-    local_name: :class:`str`
+    tag: :class:`str`
         The name which will be used to refer to this client.
         This should be unique to all the clients.
     host: Optional[:class:`str`]
@@ -56,19 +56,19 @@ class Client:
 
     def __init__(
             self,
-            local_name: str,
+            tag: str,
             host: str = "localhost",
             port: int = 13254,
             reconnect: bool = True
     ):
         self.uri: str = f"ws://{host}:{port}"
-        self.local_name: str = local_name
+        self.tag: str = tag
         self.reconnect: bool = reconnect
         self.reconnect_threshold: int = 60
         self.max_data_size: float = 2  # MiB
         self.websocket = None
-        self.__routes = {}
-        self.__sub_routes = {}
+        self.__endpoints = {}
+        self.__sub_endpoints = {}
         self.listeners = {}
 
         self._authorized: bool = False
@@ -104,7 +104,7 @@ class Client:
     async def __verify_client(self):
         payload = MessagePayload(
             type=Payloads.verification,
-            id=self.local_name,
+            id=self.tag,
             uuid=str(uuid.uuid4())
         )
         await self.send_message(payload)
@@ -155,39 +155,39 @@ class Client:
         else:
             raise ConnectionError("Websocket is already connected!")
 
-    def route(self, name: str = None):
+    def endpoint(self, name: str = None):
         """
-        A decorator to register your route. The route name should be unique.
+        A decorator to register your endpoint. The endpoint name should be unique.
 
         Raises
         -------
             ValueError
-                Route name already exists.
+                Endpoint name already exists.
             InvalidRouteType
                 The function passed is not a coro.
         """
 
-        def route_decorator(_route_func):
-            if (name is None and _route_func.__name__ in self.__routes) or (name is not None and name in self.__routes):
-                raise ValueError("Route name is already registered!")
+        def endpoint_decorator(_endpoint_func):
+            if (name is None and _endpoint_func.__name__ in self.__endpoints) or (name is not None and name in self.__endpoints):
+                raise ValueError("Endpoint name is already registered!")
 
-            if not asyncio.iscoroutinefunction(_route_func):
-                raise InvalidRouteType("Route function must be a coro.")
+            if not asyncio.iscoroutinefunction(_endpoint_func):
+                raise InvalidRouteType("Endpoint function must be a coro.")
 
-            self.__routes[name or _route_func.__name__] = _route_func
-            return _route_func
+            self.__endpoints[name or _endpoint_func.__name__] = _endpoint_func
+            return _endpoint_func
 
         if isinstance(name, FunctionType):
-            _route_func = name
+            _endpoint_func = name
             name = name.__name__
-            return route_decorator(_route_func)
+            return endpoint_decorator(_endpoint_func)
         else:
-            return route_decorator
+            return endpoint_decorator
 
-    async def add_route(self, callback: typing.Callable, name: str = None):
+    async def add_endpoint(self, callback: typing.Callable, name: str = None):
         """|coro|
-        A function to register a route. Either a decorator or this function can be used
-        to register a route.
+        A function to register an endpoint. Either the decorator or this function can be used
+        to register an endpoint.
 
         Parameters
         ----------
@@ -201,27 +201,27 @@ class Client:
         Raises
         -------
             KeyError
-                Route name already exists.
+                Endpoint name already exists.
             InvalidRouteType
                 The function passed is not a coro.
 
         """
-        if (name in self.__routes) or (callback.__name__ in self.__routes):
-            raise KeyError(f"Route name is already registered!\nRoutes: {self.__routes}")
+        if (name in self.__endpoints) or (callback.__name__ in self.__endpoints):
+            raise KeyError(f"Endpoint name is already registered!\nRoutes: {self.__endpoints}")
         if not asyncio.iscoroutinefunction(callback):
-            raise InvalidRouteType('Route callback must be an asyncio coro.')
+            raise InvalidRouteType('Endpoint callback must be an asyncio coro.')
 
-        self.__routes[name or callback.__name__] = callback
+        self.__endpoints[name or callback.__name__] = callback
         return callback
 
-    def remove_route(self, name: str):
+    def remove_endpoint(self, name: str):
         """
-        Removes a route from the registered routes.
+        Removes an endpoint from the registered endpoints.
         
         Parameters
         ----------
         name
-            The name of the route to be removed.
+            The name of the endpoint to be removed.
 
         Returns
         -------
@@ -230,22 +230,22 @@ class Client:
         Raises
         -------
             KeyError
-                Route name does not exist.
+                Endpoint name does not exist.
         """
-        if name in self.__routes:
-            del self.__routes[name]
+        if name in self.__endpoints:
+            del self.__endpoints[name]
         else:
-            raise KeyError(f"Route name {name} does not exist!")
+            raise KeyError(f"Endpoint '{name}' does not exist!")
 
-    async def __purge_sub_routes(self, timeout, _uuid):
+    async def __purge_sub_endpoints(self, timeout, _uuid):
         await asyncio.sleep(timeout)
-        del self.__sub_routes[_uuid]
+        del self.__sub_endpoints[_uuid]
 
     def __register_object_funcs(self, winerp_object: winerpObject):
-        self.__sub_routes[winerp_object.uuid] = {}
+        self.__sub_endpoints[winerp_object.uuid] = {}
         for function_name, function_object in winerp_object.functions.items():
-            self.__sub_routes[winerp_object.uuid][function_name] = function_object
-        asyncio.create_task(self.__purge_sub_routes(
+            self.__sub_endpoints[winerp_object.uuid][function_name] = function_object
+        asyncio.create_task(self.__purge_sub_endpoints(
             winerp_object.object_expiry, winerp_object.uuid
         ))
 
@@ -275,7 +275,7 @@ class Client:
         _uuid = str(uuid.uuid4())
         payload = MessagePayload(
             type=Payloads.ping,
-            id=self.local_name,
+            id=self.tag,
             destination=client,
             uuid=_uuid
         )
@@ -293,7 +293,7 @@ class Client:
         _uuid = str(uuid.uuid4())
         payload = MessagePayload(
             type=Payloads.function_call,
-            id=self.local_name,
+            id=self.tag,
             destination=destination,
             uuid=_uuid,
             data={
@@ -317,10 +317,10 @@ class Client:
         self.listeners[_uuid] = future
         return asyncio.wait_for(future, timeout)
 
-    async def request(
+    async def call(
             self,
-            route: str,
-            source: str,
+            endpoint: str,
+            from_client: str,
             timeout: int = 60,
             **kwargs
     ) -> Any:
@@ -331,10 +331,10 @@ class Client:
 
         Parameters
         -----------
-        route: :class:`str`
-            The route to request to.
-        source: :class:`str`
-            The destination
+        endpoint: :class:`str`
+            The endpoint to call for data request
+        from_client: :class:`str`
+            The request will be sent to this client
         timeout: :class:`int`
             Time to wait before raising :class:`~asyncio.TimeoutError`.
 
@@ -362,17 +362,17 @@ class Client:
             if not self._authorized:
                 raise UnauthorizedError("Client is not authorized!")
 
-            if not route or not source:
+            if not endpoint or not from_client:
                 raise ValueError("Missing required information for this request")
 
-            logger.info("Requesting IPC Server for %r", route)
+            logger.info("Requesting IPC Server for %r", endpoint)
 
             _uuid = str(uuid.uuid4())
             payload = MessagePayload(
                 type=Payloads.request,
-                id=self.local_name,
-                destination=source,
-                route=route,
+                id=self.tag,
+                destination=from_client,
+                route=endpoint,
                 data=kwargs,
                 uuid=_uuid
             )
@@ -384,7 +384,7 @@ class Client:
         else:
             raise ClientNotReadyError("The client has not been started or has disconnected")
 
-    async def inform(
+    async def broadcast(
             self,
             data: Any,
             destinations: list
@@ -426,7 +426,7 @@ class Client:
 
             payload = MessagePayload(
                 type=Payloads.information,
-                id=self.local_name,
+                id=self.tag,
                 route=destinations,
                 data=data,
             )
@@ -520,11 +520,11 @@ class Client:
                 asyncio.create_task(self._dispatch(message))
 
             elif message.type.request:
-                if message.route not in self.__routes:
+                if message.route not in self.__endpoints:
                     logger.info("Failed to fulfill request, route not found")
                     payload = MessagePayload(
                         type=Payloads.error,
-                        id=self.local_name,
+                        id=self.tag,
                         data="Route not found",
                         traceback="Route not found",
                         destination=message.id,
@@ -563,12 +563,12 @@ class Client:
                 logger.debug(message.data)
                 payload = MessagePayload(
                     type=Payloads.response,
-                    id=self.local_name,
+                    id=self.tag,
                     destination=message.id,
                     uuid=message.uuid
                 )
                 try:
-                    called_function = self.__sub_routes[message.data["__uuid__"]][message.data["__func__"]]
+                    called_function = self.__sub_endpoints[message.data["__uuid__"]][message.data["__func__"]]
                     asyncio.create_task(
                         self._fulfil_callback(
                             payload,
@@ -580,7 +580,7 @@ class Client:
                 except KeyError:
                     payload = MessagePayload(
                         type=Payloads.error,
-                        id=self.local_name,
+                        id=self.tag,
                         data="The called function has either expired or has never been registered",
                         traceback="The called function has either expired or has never been registered",
                         destination=message.id,
@@ -617,11 +617,11 @@ class Client:
 
     async def _fulfill_request(self, message: WsMessage):
         route = message.route
-        func = self.__routes[route]
+        func = self.__endpoints[route]
         data = message.data
         payload = MessagePayload().from_message(message)
         payload.type = Payloads.response
-        payload.id = self.local_name
+        payload.id = self.tag
 
         try:
             payload.data = await func(message.destination, **data)
