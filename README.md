@@ -1,7 +1,7 @@
 # winerp
 An IPC based on Websockets. Fast, Stable, and easy-to-use, for inter-communication between your processes or discord.py bots.
 
-Documentation: https://winerp.readthedocs.io/
+Documentation: https://winerp.readthedocs.io/  
 Discord Server: https://discord.gg/T28F8hju9Y
 
 > **BREAKING CHANGES (1.4.0):**  
