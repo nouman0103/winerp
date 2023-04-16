@@ -22,7 +22,7 @@ Client
    .. automethod:: winerp.client.Client.route()
       :decorator:
    
-   .. automethod:: winerp.client.Client.event()
+   .. automethod:: winerp.client.Client().event()
       :decorator:
 
 Server

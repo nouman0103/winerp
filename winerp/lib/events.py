@@ -122,5 +122,5 @@ class Events:
             raise TypeError("Event function must be a coro.")
 
         setattr(self, func.__name__, func)
-        self._logger.debug(('%s has successfully been registered as an event', func.__name__))
+        self._logger.debug('%s has successfully been registered as an event', func.__name__)
         return func
