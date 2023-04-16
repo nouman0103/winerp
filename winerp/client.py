@@ -31,6 +31,7 @@ from .lib.errors import (
 from .lib.events import Events
 from .lib.message import WsMessage
 from .lib.payload import Payloads, MessagePayload, winerpObject, responseObject
+from .lib.reference import ClientReference
 
 logger = logging.getLogger(__name__)
 Coro = TypeVar('Coro', bound=Callable[..., Coroutine[Any, Any, Any]])
@@ -673,3 +674,6 @@ class Client:
             future.set_exception(
                 ClientRuntimeError(msg.data)
             )
+
+    def get_client(self, client_tag: str):
+        return ClientReference(client_tag, self)
