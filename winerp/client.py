@@ -624,7 +624,7 @@ class Client:
         payload.id = self.local_name
 
         try:
-            payload.data = await func(message.id, **data)
+            payload.data = await func(message.destination, **data)
             if isinstance(payload.data, winerpObject):
                 self.__parse_object(payload)
         except Exception as error:
