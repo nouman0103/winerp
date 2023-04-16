@@ -675,5 +675,5 @@ class Client:
                 ClientRuntimeError(msg.data)
             )
 
-    def get_client(self, client_tag: str):
-        return ClientReference(client_tag, self)
+    def get_client(self, tag: str):
+        return ClientReference(tag, self)
