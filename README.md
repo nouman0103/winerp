@@ -56,7 +56,7 @@ user_name = await ipc.call(endpoint="fetch_user_name", from_client="another-cool
 
 - Or:
 ```
-another_cool_bot = ipc.get_client(tag = "another-cool-bot") //reusable object
+another_cool_bot = ipc.get_client(tag = "another-cool-bot") #reusable object
 ...
 user_name = await another_cool_bot.call(endpoint="fetch_user_name", user_id = 123)
 ```
