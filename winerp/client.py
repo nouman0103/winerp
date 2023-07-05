@@ -75,7 +75,6 @@ class Client:
         self._on_hold = False
         self.__events = Events(logger)
         self.event = self.__events.event
-        self.clients = []
 
     @property
     def authorized(self) -> bool:
