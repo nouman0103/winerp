@@ -111,7 +111,7 @@ class Client:
         await self.send_message(payload)
         logger.info("Verification request sent")
 
-    async def _clients(self, timeout: int = 60):
+    async def clients(self, timeout: int = 60):
         _uuid = str(uuid.uuid4())
         payload = MessagePayload(
             type=Payloads.response,
