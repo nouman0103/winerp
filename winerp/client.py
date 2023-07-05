@@ -75,6 +75,7 @@ class Client:
         self._on_hold = False
         self.__events = Events(logger)
         self.event = self.__events.event
+        self.clients = []
 
     @property
     def authorized(self) -> bool:
@@ -109,6 +110,26 @@ class Client:
         )
         await self.send_message(payload)
         logger.info("Verification request sent")
+
+    async def _clients(self, timeout: int = 60):
+        _uuid = str(uuid.uuid4())
+        payload = MessagePayload(
+            type=Payloads.response,
+            id=self.local_name,
+            uuid=_uuid,
+            destination="server"
+        )
+        await self.send_message(payload)
+        
+        future = asyncio.get_event_loop().create_future()
+        
+        self.listeners[_uuid] = future
+        
+        try:
+            response = await asyncio.wait_for(future, timeout)
+            return response
+        except asyncio.TimeoutError:
+            raise TimeoutError(f"No response received within the specified timeout ({timeout} seconds).")
 
     async def __connect(self) -> None:
         if self.websocket is None or self.websocket.closed:

@@ -182,6 +182,11 @@ class Server:
 
         if msg.type.response or msg.type.error or msg.type.function_call:
             logger.debug("Received Response Message from client %s" % client['address'][1])
+            if msg.destination == "server":
+                logger.info("Received Clients Message from client %s" % client['address'][1])
+                payload.type = Payloads.response
+                payload.data = list(self.active_clients.keys())
+                self.__send_message(client, payload)
             if msg.destination not in self.active_clients:
                 payload.type = Payloads.error
                 payload.data = "The data requester is no longer connected"
