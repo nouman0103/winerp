@@ -14,7 +14,8 @@ class Payloads:
     error = 4
     ping = 5
     information = 6
-    function_call = 7
+    question = 7
+    function_call = 8
 
 class PayloadTypes:
     '''
@@ -25,6 +26,7 @@ class PayloadTypes:
         | ``response``: Response to a request.
         | ``error``: Error response.
         | ``ping``: Ping message.
+        | ``question``: Question message.
     '''
     def __init__(self, type: int) -> None:
         self._type = type
@@ -82,9 +84,16 @@ class PayloadTypes:
         return self._type == Payloads.information
 
     @property
+    def question(self) -> bool:
+        '''
+        :class:`bool`: Returns ``True`` if the message is a question message.
+        '''
+        return self._type == Payloads.question
+    
+    @property
     def function_call(self) -> bool:
         '''
-        :class:`bool`: Returns ``True`` if the message is an information message.
+        :class:`bool`: Returns ``True`` if the message is a function call message.
         '''
         return self._type == Payloads.function_call
 
