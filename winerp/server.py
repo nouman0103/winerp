@@ -103,6 +103,7 @@ class Server:
     def __on_message(self, client, _, msg):
         msg = WsMessage(orjson.loads(msg))
         payload = MessagePayload().from_message(msg)
+
         if msg.type.verification:
             if msg.id in self.active_clients:
                 logger.info("Connection from duplicate client has benn put on hold connection id %s and local id %s" % (client['address'][1], msg.id))
@@ -179,6 +180,17 @@ class Server:
                     payload
                 )
                 logger.debug("Request Message Forwarded to %s" % self.active_clients[msg.destination]["client"]['address'][1])
+
+        if msg.type.question:
+            logger.debug("Received Question Message from client %s" % client['address'][1])
+            payload.type = Payloads.question
+
+            payload.data = list(self.active_clients.keys())
+
+            self.__send_message(
+                client,
+                payload
+            )
 
         if msg.type.response or msg.type.error or msg.type.function_call:
             logger.debug("Received Response Message from client %s" % client['address'][1])
