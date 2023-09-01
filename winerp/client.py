@@ -592,8 +592,8 @@ class Client:
                     logger.debug("Received an information bit from client: %s", message.id)
                     self.__events.dispatch_event('winerp_information', message.data, message.id)
 
-            elif message.type.question:
-                logger.debug("Received the response of the qusetion from server")
+            elif message.type.client_count:
+                logger.debug("Received the response of the client_count from server")
                 asyncio.create_task(self._dispatch(message))
 
             elif message.type.function_call:
