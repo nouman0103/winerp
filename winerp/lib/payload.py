@@ -14,8 +14,9 @@ class Payloads:
     error = 4
     ping = 5
     information = 6
-    question = 7
-    function_call = 8
+    function_call = 7
+    client_count = 9
+    
 
 class PayloadTypes:
     '''
@@ -84,11 +85,11 @@ class PayloadTypes:
         return self._type == Payloads.information
 
     @property
-    def question(self) -> bool:
+    def client_count(self) -> bool:
         '''
-        :class:`bool`: Returns ``True`` if the message is a question message.
+        :class:`bool`: Returns ``True`` if the message is a client_count message.
         '''
-        return self._type == Payloads.question
+        return self._type == Payloads.client_count
     
     @property
     def function_call(self) -> bool:
