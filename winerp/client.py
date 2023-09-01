@@ -409,7 +409,7 @@ class Client:
         logger.debug("Getting all connected clients")
         _uuid = str(uuid.uuid4())
         payload = MessagePayload(
-            type=Payloads.question,
+            type=Payloads.client_count,
             id=self.local_name,
             uuid=_uuid
         )
