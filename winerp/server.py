@@ -181,9 +181,9 @@ class Server:
                 )
                 logger.debug("Request Message Forwarded to %s" % self.active_clients[msg.destination]["client"]['address'][1])
 
-        if msg.type.question:
-            logger.debug("Received Question Message from client %s" % client['address'][1])
-            payload.type = Payloads.question
+        if msg.type.client_count:
+            logger.debug("Received Client_count Message from client %s" % client['address'][1])
+            payload.type = Payloads.client_count
 
             payload.data = list(self.active_clients.keys())
 
