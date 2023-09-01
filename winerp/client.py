@@ -384,6 +384,40 @@ class Client:
         else:
             raise ClientNotReadyError("The client has not been started or has disconnected")
 
+    async def get_clients(self, timeout: int = 60) -> list:
+        """|coro|
+
+        Gets all the connected clients.
+
+        Raises
+        -------
+            ClientNotReadyError
+                The client is currently not ready to send or accept requests.
+            UnauthorizedError
+                The client isn't authorized by the server.
+        
+        Returns
+        --------
+            :class:`list`
+                A list of connected clients.
+        """
+        if self._on_hold or self.websocket is None or not self.websocket.open:
+            raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
+        if not self._authorized:
+            raise UnauthorizedError("Client is not authorized!")
+
+        logger.debug("Getting all connected clients")
+        _uuid = str(uuid.uuid4())
+        payload = MessagePayload(
+            type=Payloads.client_count,
+            id=self.local_name,
+            uuid=_uuid
+        )
+        await self.send_message(payload)
+        resp = await self.__get_response(_uuid, asyncio.get_event_loop(), timeout=timeout)
+        return resp
+
+
     async def inform(
             self,
             data: Any,
@@ -557,6 +591,10 @@ class Client:
                 if message.data:
                     logger.debug("Received an information bit from client: %s", message.id)
                     self.__events.dispatch_event('winerp_information', message.data, message.id)
+
+            elif message.type.client_count:
+                logger.debug("Received the response of the client_count from server")
+                asyncio.create_task(self._dispatch(message))
 
             elif message.type.function_call:
                 logger.debug("Received an object function call.")
